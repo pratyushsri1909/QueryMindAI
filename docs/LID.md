@@ -26,7 +26,7 @@ The primary input mechanism for QueryMind AI is an unconstrained, free-text natu
 | :--- | :--- | :--- |
 | **Data Format** | JSON payload over HTTP POST | Planned |
 | **Payload Schema** | `{"query": string, "database_id": optional string}` | Proposed Interface |
-| **Character Encoding** | UTF-8 | Implemented Standard |
+| **Character Encoding** | UTF-8 | Planned Standard |
 | **Text Constraints** | Min length: 3 characters; Max length: 500 characters | Planned Rule |
 | **Case Sensitivity** | Case-insensitive normalization during preprocessing | Planned Rule |
 | **Language Support** | English (Standard and conversational phrasing) | Planned Scope |

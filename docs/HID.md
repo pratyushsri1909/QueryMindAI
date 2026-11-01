@@ -14,9 +14,9 @@ QueryMind AI
 │   └── 1.5 SQL Inspection & Explanation Panel [Planned]
 ├── 2. Backend API (FastAPI Gateway)
 │   ├── 2.1 Service Lifecycle & Health Management [Implemented]
-│   ├── 2.2 Request Ingestion & Data Validation [Implemented Foundation / Extensible Planned]
-│   ├── 2.3 API Routing & Controller Endpoints [Implemented Foundation / Extensible Planned]
-│   ├── 2.4 Error Handling & Global Exceptions [Implemented Foundation]
+│   ├── 2.2 Request Ingestion & Data Validation [Planned]
+│   ├── 2.3 API Routing & Controller Endpoints [Planned]
+│   ├── 2.4 Error Handling & Global Exceptions [Planned]
 │   └── 2.5 Security, CORS & Rate Limiting [Planned]
 ├── 3. NLP Engine — Member 1
 │   ├── 3.1 Text Cleaning & Preprocessing [Planned]
@@ -55,15 +55,15 @@ QueryMind AI
 ### 2.2 Backend API (FastAPI Application Gateway)
 - **Primary Responsibility:** Serve as the central communication, validation, orchestration, and response-formatting layer connecting the client interface with the specialized backend processing engines.
 - **Submodules:**
-  - `Service Lifecycle & Health Management`: Provides core health monitoring (`/health`) and service metadata (`/`).
-  - `Request Ingestion & Data Validation`: Validates schema conformance, data types, and bounds on incoming payloads.
-  - `API Routing & Controller Endpoints`: Dispatches validated requests to pipeline handlers.
-  - `Response Handling`: Translates pipeline artifacts into standardized JSON responses or clean HTTP error envelopes.
+  - `Service Lifecycle & Health Management`: Provides core health monitoring (`/health`) and service metadata (`/`). [Implemented]
+  - `Request Ingestion & Data Validation`: Validates schema conformance, data types, and bounds on incoming query payloads. [Planned]
+  - `API Routing & Controller Endpoints`: Dispatches validated requests to pipeline handlers. [Planned]
+  - `Response Handling`: Translates pipeline artifacts into standardized JSON responses or clean HTTP error envelopes. [Planned]
 - **Status:** **Partially Implemented (Day 1)**:
   - Core FastAPI application framework initialized.
   - `GET /` and `GET /health` endpoints active and tested.
   - Clean modular architecture laid out in `app/`.
-  - Comprehensive query processing endpoints (`/api/v1/query`) planned for subsequent iterations.
+  - Comprehensive query processing endpoints (`/api/v1/query`) and request validation planned for subsequent iterations.
 
 ---
 

@@ -56,7 +56,7 @@ QueryMindAI/
   The automated test file using `pytest` and `fastapi.testclient.TestClient`. It provides deterministic verification of HTTP status codes and response bodies for the core application endpoints.
 
 - **`backend/requirements.txt`**:
-  Specifies the pinned top-level Python packages required across all backend layers (FastAPI, SQLAlchemy, psycopg, spaCy, NLTK, Scikit-learn, SQLGlot, Pytest, HTTPX).
+  Specifies the unpinned top-level Python packages required across all backend layers (FastAPI, SQLAlchemy, psycopg, spaCy, NLTK, Scikit-learn, SQLGlot, Pytest, HTTPX).
 
 - **`.gitignore`**:
   Guarantees repository hygiene by excluding Python caches (`__pycache__`), virtual environments (`venv/`), environment variables (`.env`), test artifacts (`.pytest_cache/`), and IDE configurations (`.vscode/`, `.idea/`).
@@ -144,7 +144,6 @@ def health_check() -> Dict[str, str]:
 ```python
 """Automated tests for QueryMind AI core FastAPI endpoints."""
 
-import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 
@@ -182,7 +181,7 @@ def test_health_payload() -> None:
 
 ## 5. Dependencies and Requirements
 
-The declared dependencies in `backend/requirements.txt` cover the full lifecycle of QueryMind AI:
+The declared dependencies in `backend/requirements.txt` are unpinned top-level packages covering the full lifecycle of QueryMind AI:
 
 | Package | Purpose |
 | :--- | :--- |

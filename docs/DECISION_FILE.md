@@ -5,7 +5,7 @@
 This document formalizes the decision logic, branch points, and rule evaluation matrices governing **QueryMind AI**. It provides rigorous criteria for handling every state transition, input permutation, validation condition, and failure scenario.
 
 > **Status Notice:**  
-> The rules, decision tables, pseudocode routines, and logic trees documented here constitute the **proposed architectural decision contracts**. In the **Day 1** release, baseline API request validation and error responses are active. Downstream NLP, schema mapping, SQL validation, and database decision branches will be implemented in subsequent phases by their respective team members.
+> The rules, decision tables, pseudocode routines, and logic trees documented here constitute the **proposed architectural decision contracts**. In the **Day 1** release, the FastAPI application foundation and base endpoints (`GET /` and `GET /health`) are active. Query input validation rules, downstream NLP, schema mapping, SQL validation, and database decision branches are planned for subsequent phases.
 
 ---
 
@@ -47,11 +47,11 @@ flowchart TD
 
 | Condition | Check Description | Action Taken | HTTP Code | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| `len(trim(query)) == 0` | Input is empty | Reject with "Query string cannot be empty" | 422 Unprocessable | Implemented |
-| `len(query) < 3` | Query too short | Reject with "Query must be at least 3 characters" | 422 Unprocessable | Implemented |
-| `len(query) > 500` | Query too long | Reject with "Query exceeds 500 character limit" | 422 Unprocessable | Implemented |
+| `len(trim(query)) == 0` | Input is empty | Reject with "Query string cannot be empty" | 422 Unprocessable | Planned |
+| `len(query) < 3` | Query too short | Reject with "Query must be at least 3 characters" | 422 Unprocessable | Planned |
+| `len(query) > 500` | Query too long | Reject with "Query exceeds 500 character limit" | 422 Unprocessable | Planned |
 | `contains_dangerous_tokens(query)` | Basic injection pattern | Reject with "Invalid characters or patterns detected" | 400 Bad Request | Planned |
-| `All checks pass` | Input clean and well-formed | Pass query to NLP Engine | 200 / Continue | Implemented |
+| `All checks pass` | Input clean and well-formed | Pass query to NLP Engine | 200 / Continue | Planned |
 
 ### 3.3 Pseudocode
 
