@@ -9,28 +9,48 @@ QueryMindAI/
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py          # App package indicator
-│   │   ├── api/                 # API controllers and routing [Planned]
-│   │   │   └── __init__.py
-│   │   ├── core/                # Core configuration and security settings [Planned]
-│   │   │   └── __init__.py
+│   │   ├── api/                 # API controllers and routing [Implemented - Day 2]
+│   │   │   ├── __init__.py
+│   │   │   └── routes.py
+│   │   ├── core/                # Core configuration and settings [Implemented - Day 2]
+│   │   │   ├── __init__.py
+│   │   │   └── config.py
 │   │   ├── database/            # SQLAlchemy database engine and session [Planned]
 │   │   │   └── __init__.py
 │   │   ├── models/              # Database ORM models [Planned]
 │   │   │   └── __init__.py
-│   │   ├── schemas/             # Pydantic schemas for request/response [Planned]
-│   │   │   └── __init__.py
-│   │   ├── nlp/                 # NLP Engine by Member 1 [Planned]
-│   │   │   └── __init__.py
-│   │   ├── sql_engine/          # SQL Engine by Member 2 [Planned]
-│   │   │   └── __init__.py
+│   │   ├── schemas/             # Pydantic request/response schemas [Implemented - Day 2]
+│   │   │   ├── __init__.py
+│   │   │   └── query.py
+│   │   ├── nlp/                 # NLP Engine by Member 1 [Mock Implemented - Day 2]
+│   │   │   ├── __init__.py
+│   │   │   └── mock_nlp.py
+│   │   ├── sql_engine/          # SQL Engine by Member 2 [Mock Implemented - Day 2]
+│   │   │   ├── __init__.py
+│   │   │   └── mock_sql_engine.py
 │   │   └── main.py              # Application entrypoint & base endpoints [Implemented]
 │   ├── tests/
 │   │   ├── __init__.py          # Test suite package indicator
-│   │   └── test_main.py         # Pytest automated API tests [Implemented]
+│   │   ├── test_main.py         # Pytest automated API tests [Implemented]
+│   │   └── test_query.py        # Pytest pipeline and validation tests [Implemented - Day 2]
 │   ├── requirements.txt         # Backend Python dependencies [Implemented]
 │   └── venv/                    # Isolated Python virtual environment (ignored)
-├── frontend/
-│   └── .gitkeep                 # Future React + Vite web client [Planned]
+├── frontend/                    # React + Vite web client [Implemented - Day 2]
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Header.jsx
+│   │   │   ├── QueryInput.jsx
+│   │   │   ├── SqlPanel.jsx
+│   │   │   ├── ResultsTable.jsx
+│   │   │   └── ExecutionInfo.jsx
+│   │   ├── services/
+│   │   │   └── queryService.js
+│   │   ├── App.jsx
+│   │   ├── main.jsx
+│   │   └── index.css
+│   ├── package.json
+│   ├── vite.config.js
+│   └── tailwind.config.js
 ├── datasets/
 │   └── .gitkeep                 # Sample benchmark datasets and schemas [Planned]
 ├── docs/

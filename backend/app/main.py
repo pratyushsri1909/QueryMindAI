@@ -2,12 +2,28 @@
 
 from typing import Dict
 from fastapi import FastAPI, status
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.config import settings
+from app.api.routes import router as api_router
 
 app = FastAPI(
-    title="QueryMind AI",
-    description="Natural Language to SQL Query Assistant",
-    version="1.0.0",
+    title=settings.app_title,
+    description=settings.app_description,
+    version=settings.app_version,
 )
+
+# Configure CORS for local development (e.g. Vite frontend)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount modular API router under /api/v1
+app.include_router(api_router, prefix=settings.api_v1_prefix)
 
 
 @app.get(
