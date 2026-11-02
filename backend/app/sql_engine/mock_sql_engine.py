@@ -130,3 +130,4 @@ def process_ir(ir: Dict[str, Any]) -> Dict[str, Any]:
         "generated_sql": generated_sql,
         "execution": execution_payload,
     }
+

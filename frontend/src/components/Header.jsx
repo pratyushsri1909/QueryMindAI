@@ -70,3 +70,4 @@ export default function Header({ backendStatus, onRefreshStatus, isCheckingStatu
     </header>
   );
 }
+

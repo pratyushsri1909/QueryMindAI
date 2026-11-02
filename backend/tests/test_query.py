@@ -166,3 +166,4 @@ def test_query_generic_fallback() -> None:
     assert "SELECT id, name, department, cgpa FROM students" in data["generated_sql"]
     assert data["execution"]["status"] == "mock_success"
     assert data["execution"]["row_count"] == 5
+

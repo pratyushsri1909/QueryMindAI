@@ -96,3 +96,4 @@ class QueryResponse(BaseModel):
     execution: ExecutionResult = Field(
         ..., description="Tabular results and execution metadata"
     )
+

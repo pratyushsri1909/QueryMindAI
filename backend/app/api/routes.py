@@ -51,3 +51,4 @@ def handle_query(request: QueryRequest) -> QueryResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected internal error occurred during query processing: {str(exc)}",
         ) from exc
+
