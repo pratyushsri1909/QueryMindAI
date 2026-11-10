@@ -1,7 +1,11 @@
 """Automated unit and integration tests for QueryMind AI Day 3 Database Foundation."""
 
+import datetime
+import json
+import uuid
+from decimal import Decimal
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session, sessionmaker
 from fastapi.testclient import TestClient
@@ -9,9 +13,13 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.core.config import Settings
 from app.database.models import Base, Student, Course, Enrollment
-from app.database.session import check_db_connection
+from app.database.session import check_db_connection, get_session_factory, get_engine
 from app.database.seed import seed_database
-from app.services.database_service import validate_sql, execute_read_query
+from app.services.database_service import (
+    validate_sql,
+    execute_read_query,
+    _serialize_value,
+)
 
 client = TestClient(app)
 
@@ -179,6 +187,179 @@ def test_sql_validation_rejects_restricted_system_tables():
         assert "prohibited" in err.lower()
 
 
+def test_sql_validation_rejects_select_into():
+    """Verify that top-level and nested SELECT ... INTO statements are strictly rejected."""
+    into_queries = [
+        "SELECT * INTO new_table FROM students;",
+        "SELECT student_id, name INTO TEMP temp_students FROM students;",
+        "WITH cte AS (SELECT * INTO temp_students FROM students) SELECT * FROM cte;",
+        "SELECT * FROM (SELECT * INTO temp_students FROM students) s;",
+    ]
+    for q in into_queries:
+        is_valid, err = validate_sql(q)
+        assert is_valid is False, f"Expected SELECT INTO to be rejected for: {q}"
+        assert "SELECT ... INTO" in err or "Security violation" in err
+
+
+def test_sql_validation_allows_truncate_in_literal_but_rejects_truncate_table():
+    """Verify that 'truncate' as a literal string passes, while TRUNCATE statements are blocked."""
+    # Legitimate queries with 'truncate' inside string literals must pass
+    valid_literal_queries = [
+        "SELECT * FROM students WHERE name = 'truncate';",
+        "SELECT course_name FROM courses WHERE department = 'CSE' AND course_name LIKE '%truncate%';",
+    ]
+    for q in valid_literal_queries:
+        is_valid, err = validate_sql(q)
+        assert is_valid is True, f"Expected valid query for: {q} | Error: {err}"
+        assert err is None
+
+    # Actual TRUNCATE statements must be rejected via AST inspection
+    truncate_statements = [
+        "TRUNCATE TABLE students;",
+        "TRUNCATE students;",
+    ]
+    for q in truncate_statements:
+        is_valid, err = validate_sql(q)
+        assert is_valid is False, f"Expected TRUNCATE statement to be rejected for: {q}"
+        assert "Security violation" in err
+
+
+def test_sql_validation_rejects_expanded_system_catalogs_and_schemas():
+    """Verify that pg_settings, pg_tables, pg_class, pg_proc, and information_schema are rejected."""
+    restricted_queries = [
+        "SELECT * FROM pg_settings;",
+        "SELECT * FROM pg_tables;",
+        "SELECT * FROM pg_class;",
+        "SELECT * FROM pg_proc;",
+        "SELECT * FROM information_schema.tables;",
+        "SELECT * FROM information_schema.columns;",
+        "SELECT * FROM pg_catalog.pg_class;",
+    ]
+    for q in restricted_queries:
+        is_valid, err = validate_sql(q)
+        assert is_valid is False, f"Expected restricted catalog query to be rejected for: {q}"
+        assert "Security violation" in err
+        assert "prohibited" in err.lower()
+
+
+def test_sql_validation_rejects_administrative_functions():
+    """Verify that dangerous administrative and file I/O functions are rejected."""
+    dangerous_function_queries = [
+        "SELECT pg_sleep(5);",
+        "SELECT pg_sleep_for('5 seconds');",
+        "SELECT pg_terminate_backend(1234);",
+        "SELECT pg_cancel_backend(1234);",
+        "SELECT lo_export(1, 'evil.txt');",
+        "SELECT pg_read_file('config.json');",
+    ]
+    for q in dangerous_function_queries:
+        is_valid, err = validate_sql(q)
+        assert is_valid is False, f"Expected dangerous function to be rejected for: {q}"
+        assert "Security violation" in err
+        assert "administrative function" in err.lower()
+
+
+def test_sql_validation_comment_handling_and_edge_cases():
+    """Verify that legitimate comments, string literals with semicolons, and edge cases parse safely."""
+    # 1. SELECT with trailing line comment (both with and without semicolon)
+    valid_line_comment = [
+        "SELECT name FROM students; -- list students",
+        "SELECT name FROM students -- list students",
+    ]
+    for q in valid_line_comment:
+        is_valid, err = validate_sql(q)
+        assert is_valid is True, f"Failed for: {q} | Error: {err}"
+        assert err is None
+
+    # 2. SELECT with block comment
+    valid_block_comment = [
+        "SELECT name FROM students /* student list */;",
+        "SELECT name, /* inline comment */ cgpa FROM students;",
+    ]
+    for q in valid_block_comment:
+        is_valid, err = validate_sql(q)
+        assert is_valid is True, f"Failed for: {q} | Error: {err}"
+        assert err is None
+
+    # 3. SELECT with comments before the statement (leading comments)
+    valid_leading_comment = [
+        "-- header line comment\nSELECT name FROM students;",
+        "/* header block comment */ SELECT name FROM students;",
+        "/* block 1 */ -- line 1\nSELECT name FROM students;",
+    ]
+    for q in valid_leading_comment:
+        is_valid, err = validate_sql(q)
+        assert is_valid is True, f"Failed for: {q} | Error: {err}"
+        assert err is None
+
+    # 4. Semicolons inside string literals
+    valid_semicolon_literal = [
+        "SELECT name FROM students WHERE name = 'Aarav; -- not a comment';",
+        "SELECT name FROM students WHERE name = 'semi;colon;test';",
+    ]
+    for q in valid_semicolon_literal:
+        is_valid, err = validate_sql(q)
+        assert is_valid is True, f"Failed for: {q} | Error: {err}"
+        assert err is None
+
+    # 5. SQL keywords inside string literals
+    valid_keywords_literal = [
+        "SELECT * FROM students WHERE name = 'DROP TABLE students; DELETE FROM courses;';",
+        "SELECT * FROM courses WHERE course_name = 'INSERT INTO courses VALUES (1);';",
+    ]
+    for q in valid_keywords_literal:
+        is_valid, err = validate_sql(q)
+        assert is_valid is True, f"Failed for: {q} | Error: {err}"
+        assert err is None
+
+    # 6. Multiple statements with comments between them (must be rejected)
+    multiple_with_comments = [
+        "SELECT * FROM students; /* comment */ DROP TABLE students;",
+        "SELECT * FROM students; -- comment\nDROP TABLE students;",
+        "SELECT * FROM students; -- comment\nSELECT * FROM courses;",
+    ]
+    for q in multiple_with_comments:
+        is_valid, err = validate_sql(q)
+        assert is_valid is False, f"Expected multiple statements to be rejected for: {q}"
+        assert "Multiple SQL statements" in err
+
+    # 7. SELECT INTO with comments (must be rejected)
+    into_with_comments = [
+        "SELECT * INTO new_table FROM students; -- comment",
+        "/* comment */ SELECT * INTO new_table FROM students;",
+    ]
+    for q in into_with_comments:
+        is_valid, err = validate_sql(q)
+        assert is_valid is False, f"Expected SELECT INTO to be rejected for: {q}"
+        assert "Security violation" in err
+
+    # 8. Nested forbidden operations with comments (must be rejected)
+    forbidden_with_comments = [
+        "WITH cte AS (DELETE FROM students RETURNING *) SELECT * FROM cte; -- comment",
+        "WITH cte AS (INSERT INTO students VALUES (99, 'X', 2028, 9.0, 'CSE') RETURNING *) SELECT * FROM cte; /* c */",
+    ]
+    for q in forbidden_with_comments:
+        is_valid, err = validate_sql(q)
+        assert is_valid is False, f"Expected nested forbidden op to be rejected for: {q}"
+        assert "Security violation" in err
+
+    # 9. Empty SQL and comment-only SQL (must be rejected)
+    empty_and_comment_only = [
+        "",
+        "   ",
+        "\t\n  ",
+        "-- comment only",
+        "/* block comment only */",
+        ";",
+        ";;;",
+        "; -- trailing comment",
+    ]
+    for q in empty_and_comment_only:
+        is_valid, err = validate_sql(q)
+        assert is_valid is False, f"Expected empty/comment-only query to be rejected for: {repr(q)}"
+        assert "empty" in err.lower() or "no valid sql" in err.lower()
+
+
 # ---------------------------------------------------------------------------
 # 5. Database Service Execution Tests
 # ---------------------------------------------------------------------------
@@ -212,6 +393,176 @@ def test_execute_read_query_runtime_error(in_memory_db):
     res = execute_read_query("SELECT * FROM non_existent_table_xyz;", engine=engine)
     assert res["status"] == "error"
     assert "Database execution error" in res["error"]
+
+
+def test_execute_read_query_session_timeout():
+    """Verify that statement_timeout cancels long queries executed through a SQLAlchemy Session."""
+    conn_info = check_db_connection()
+    if not conn_info["connected"]:
+        pytest.skip("PostgreSQL database is offline; skipping live session timeout test.")
+
+    session = get_session_factory()()
+    try:
+        # Deliberately short timeout of 150ms on a 1000ms sleep
+        res = execute_read_query(
+            "SELECT pg_sleep(1);",
+            session=session,
+            timeout_ms=150,
+            validate=False,
+        )
+        assert res["status"] == "error"
+        assert "statement timeout" in res["error"].lower()
+
+        # Verify that Session transaction is handled safely after cancellation and reusable
+        val = session.execute(text("SELECT 1")).scalar()
+        assert val == 1
+    finally:
+        session.close()
+
+
+def test_execute_read_query_engine_timeout():
+    """Verify that statement_timeout cancels long queries executed through an Engine connection."""
+    conn_info = check_db_connection()
+    if not conn_info["connected"]:
+        pytest.skip("PostgreSQL database is offline; skipping live engine timeout test.")
+
+    eng = get_engine()
+    res = execute_read_query(
+        "SELECT pg_sleep(1);",
+        engine=eng,
+        timeout_ms=150,
+        validate=False,
+    )
+    assert res["status"] == "error"
+    assert "statement timeout" in res["error"].lower()
+
+
+def test_execute_read_query_parameterized(in_memory_db):
+    """Verify that parameterized queries bind named parameters safely, including apostrophes."""
+    engine, session = in_memory_db
+    seed_database(session)
+
+    # 1. Parameterized filter
+    res_param = execute_read_query(
+        "SELECT name, cgpa FROM students WHERE cgpa > :minimum_cgpa ORDER BY cgpa DESC;",
+        params={"minimum_cgpa": 8.5},
+        engine=engine,
+    )
+    assert res_param["status"] == "database_success"
+    assert res_param["row_count"] == 3
+    assert res_param["rows"][0][0] == "Aarav"
+    assert res_param["rows"][0][1] == 9.1
+
+    # 2. String parameter containing apostrophes (SQL injection attempt)
+    res_apostrophe = execute_read_query(
+        "SELECT * FROM students WHERE name = :search_name;",
+        params={"search_name": "O'Connor'; DROP TABLE students; --"},
+        engine=engine,
+    )
+    assert res_apostrophe["status"] == "database_success"
+    assert res_apostrophe["row_count"] == 0
+
+    # 3. Existing callers without parameters continue working (backward compatibility)
+    res_no_params = execute_read_query(
+        "SELECT name, cgpa FROM students WHERE cgpa > 8.5 ORDER BY cgpa DESC;",
+        engine=engine,
+    )
+    assert res_no_params["status"] == "database_success"
+    assert res_no_params["row_count"] == 3
+
+
+def test_execute_read_query_decimal_serialization():
+    """Verify that Decimal aggregate results are converted safely to JSON-compatible types."""
+    # Test integer-valued Decimals become int
+    assert _serialize_value(Decimal("4.0000")) == 4
+    assert isinstance(_serialize_value(Decimal("4.0000")), int)
+    assert _serialize_value(Decimal("0.0")) == 0
+    assert isinstance(_serialize_value(Decimal("0.0")), int)
+
+    # Test fraction-valued Decimals become float
+    assert _serialize_value(Decimal("8.75")) == 8.75
+    assert isinstance(_serialize_value(Decimal("8.75")), float)
+
+    # Test primitives and None remain unaltered
+    assert _serialize_value("CSE") == "CSE"
+    assert _serialize_value(42) == 42
+    assert _serialize_value(3.14) == 3.14
+    assert _serialize_value(None) is None
+    assert _serialize_value(True) is True
+
+    # Test nested structures and JSON serializability
+    row = [_serialize_value(Decimal("8.75")), _serialize_value(Decimal("4.00")), "CSE", None]
+    json_output = json.dumps(row)
+    assert json_output == '[8.75, 4, "CSE", null]'
+
+
+def test_execute_read_query_date_and_uuid_serialization():
+    """Verify that datetime.date, datetime.datetime, datetime.time, and uuid.UUID are formatted safely."""
+    sample_date = datetime.date(2026, 11, 11)
+    sample_datetime = datetime.datetime(2026, 11, 11, 1, 15, 30)
+    sample_time = datetime.time(1, 15, 30)
+    sample_uuid = uuid.UUID("12345678-1234-5678-1234-567812345678")
+
+    assert _serialize_value(sample_date) == "2026-11-11"
+    assert _serialize_value(sample_datetime) == "2026-11-11T01:15:30"
+    assert _serialize_value(sample_time) == "01:15:30"
+    assert _serialize_value(sample_uuid) == "12345678-1234-5678-1234-567812345678"
+
+    # Verify JSON serializability of date and UUID objects
+    row = [
+        _serialize_value(sample_date),
+        _serialize_value(sample_datetime),
+        _serialize_value(sample_time),
+        _serialize_value(sample_uuid),
+    ]
+    encoded = json.dumps(row)
+    assert "2026-11-11" in encoded
+    assert "12345678-1234-5678-1234-567812345678" in encoded
+
+
+def test_execute_read_query_missing_parameter(in_memory_db):
+    """Verify that omitting a required bind parameter fails safely without modifying data."""
+    engine, session = in_memory_db
+    seed_database(session)
+
+    # Missing named parameter :missing_cgpa
+    res = execute_read_query(
+        "SELECT * FROM students WHERE cgpa > :missing_cgpa;",
+        engine=engine,
+    )
+    assert res["status"] == "error"
+    assert "Database execution error" in res["error"]
+    assert "missing_cgpa" in res["error"]
+    assert res["row_count"] == 0
+
+    # Verify that database was completely unmodified
+    students = session.query(Student).all()
+    assert len(students) == 5
+
+
+def test_execute_read_query_positional_signature_compatibility(in_memory_db):
+    """Verify backward compatibility of Day 3 positional parameters (sql, session, engine, timeout_ms)."""
+    engine, session = in_memory_db
+    seed_database(session)
+
+    # 1. Day 3 positional call: execute_read_query(sql, session, engine, timeout_ms)
+    res_pos = execute_read_query(
+        "SELECT name, cgpa FROM students WHERE cgpa > 8.5 ORDER BY cgpa DESC;",
+        session,
+        None,
+        5000,
+    )
+    assert res_pos["status"] == "database_success"
+    assert res_pos["row_count"] == 3
+
+    # 2. Positional dict passed as 2nd argument: execute_read_query(sql, params_dict)
+    res_dict = execute_read_query(
+        "SELECT name, cgpa FROM students WHERE cgpa > :min_cgpa ORDER BY cgpa DESC;",
+        {"min_cgpa": 8.5},
+        engine=engine,
+    )
+    assert res_dict["status"] == "database_success"
+    assert res_dict["row_count"] == 3
 
 
 # ---------------------------------------------------------------------------
