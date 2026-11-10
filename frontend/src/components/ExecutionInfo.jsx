@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Clock, ShieldCheck, Tag, Info, ChevronDown, ChevronRight, FileJson } from 'lucide-react';
+import { Clock, ShieldCheck, Tag, Info, ChevronDown, ChevronRight, FileJson, CheckCircle } from 'lucide-react';
 
 /**
- * ExecutionInfo component showing query summary, execution metadata, and mock disclaimers.
+ * ExecutionInfo component showing query summary, execution metadata, and mock/database disclaimers.
  */
 export default function ExecutionInfo({ result }) {
   const [showIR, setShowIR] = useState(false);
@@ -15,6 +15,9 @@ export default function ExecutionInfo({ result }) {
     execution,
     ir,
   } = result;
+
+  const isMock = execution?.status === 'mock_success';
+  const isDb = execution?.status === 'database_success';
 
   return (
     <div className="space-y-4">
@@ -55,9 +58,15 @@ export default function ExecutionInfo({ result }) {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
               <span>{execution?.status || 'mock_success'}</span>
             </span>
-            <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-              MOCK
-            </span>
+            {isMock ? (
+              <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                MOCK
+              </span>
+            ) : isDb ? (
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                POSTGRESQL
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -65,7 +74,7 @@ export default function ExecutionInfo({ result }) {
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center space-x-1.5">
             <Clock className="w-3.5 h-3.5 text-indigo-500" />
-            <span>Mock Latency</span>
+            <span>{isDb ? "DB Latency" : "Mock Latency"}</span>
           </span>
           <p className="mt-2 text-sm font-mono font-semibold text-slate-800">
             {execution?.execution_time_ms ?? 12} ms
@@ -73,13 +82,22 @@ export default function ExecutionInfo({ result }) {
         </div>
       </div>
 
-      {/* Prominent Mock Notice Banner */}
-      <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 flex items-start space-x-2.5">
-        <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-        <div>
-          <span className="font-bold">Integration Prototype Mode:</span> Results and generated SQL above are produced by deterministic mock NLP and mock SQL engine components for Day 2 pipeline verification. No physical PostgreSQL queries or machine learning inference were performed.
+      {/* Notice Banner */}
+      {isMock ? (
+        <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 flex items-start space-x-2.5">
+          <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold">Integration Prototype Mode:</span> Results and generated SQL above are produced by deterministic mock NLP and mock SQL engine components for Day 2 pipeline verification. No physical PostgreSQL queries or machine learning inference were performed.
+          </div>
         </div>
-      </div>
+      ) : isDb ? (
+        <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-900 flex items-start space-x-2.5">
+          <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold">PostgreSQL Execution Mode:</span> Query was validated via SQLGlot AST inspection (read-only verification) and executed directly against the PostgreSQL academic database foundation.
+          </div>
+        </div>
+      ) : null}
 
       {/* Expandable Intermediate Representation (IR) Inspector */}
       {ir && (
@@ -109,4 +127,3 @@ export default function ExecutionInfo({ result }) {
     </div>
   );
 }
-

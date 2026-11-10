@@ -1,11 +1,12 @@
 """Main entry point for the QueryMind AI FastAPI backend application."""
 
-from typing import Dict
+from typing import Dict, Optional
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.api.routes import router as api_router
+from app.database.session import check_db_connection
 
 app = FastAPI(
     title=settings.app_title,
@@ -46,8 +47,14 @@ def read_root() -> Dict[str, str]:
     summary="Health Check Endpoint",
     response_model=Dict[str, str],
 )
-def health_check() -> Dict[str, str]:
-    """Health check endpoint indicating whether the backend service is operational."""
-    return {
-        "status": "healthy",
-    }
+def health_check(include_db: bool = False) -> Dict[str, str]:
+    """Health check endpoint indicating whether the backend service is operational.
+
+    Args:
+        include_db: If True, tests live database connectivity and includes database status.
+    """
+    payload = {"status": "healthy"}
+    if include_db:
+        db_info = check_db_connection()
+        payload["database"] = db_info["status"]
+    return payload

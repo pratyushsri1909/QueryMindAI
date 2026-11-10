@@ -15,12 +15,18 @@ QueryMindAI/
 │   │   ├── core/                # Core configuration and settings [Implemented - Day 2]
 │   │   │   ├── __init__.py
 │   │   │   └── config.py
-│   │   ├── database/            # SQLAlchemy database engine and session [Planned]
-│   │   │   └── __init__.py
-│   │   ├── models/              # Database ORM models [Planned]
-│   │   │   └── __init__.py
-│   │   ├── schemas/             # Pydantic request/response schemas [Implemented - Day 2]
+│   │   ├── database/            # SQLAlchemy database engine, session & models [Implemented - Day 3]
 │   │   │   ├── __init__.py
+│   │   │   ├── init_db.py
+│   │   │   ├── models.py
+│   │   │   ├── seed.py
+│   │   │   └── session.py
+│   │   ├── services/            # Safe SQL validation and execution service [Implemented - Day 3]
+│   │   │   ├── __init__.py
+│   │   │   └── database_service.py
+│   │   ├── schemas/             # Pydantic request/response schemas [Implemented - Day 2/3]
+│   │   │   ├── __init__.py
+│   │   │   ├── database.py
 │   │   │   └── query.py
 │   │   ├── nlp/                 # NLP Engine by Member 1 [Mock Implemented - Day 2]
 │   │   │   ├── __init__.py
@@ -31,6 +37,7 @@ QueryMindAI/
 │   │   └── main.py              # Application entrypoint & base endpoints [Implemented]
 │   ├── tests/
 │   │   ├── __init__.py          # Test suite package indicator
+│   │   ├── test_database.py     # Database ORM, security validation & session tests [Implemented - Day 3]
 │   │   ├── test_main.py         # Pytest automated API tests [Implemented]
 │   │   └── test_query.py        # Pytest pipeline and validation tests [Implemented - Day 2]
 │   ├── requirements.txt         # Backend Python dependencies [Implemented]

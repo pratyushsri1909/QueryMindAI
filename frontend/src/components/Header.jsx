@@ -1,10 +1,12 @@
 import React from 'react';
-import { Database, Activity, RefreshCw, Cpu, Layers } from 'lucide-react';
+import { Database, RefreshCw, Cpu, Server } from 'lucide-react';
 
 /**
- * Header component displaying branding, backend health status, and prototype mock indicator.
+ * Header component displaying branding, backend health status, database connection, and mock indicator.
  */
 export default function Header({ backendStatus, onRefreshStatus, isCheckingStatus }) {
+  const isDbConnected = backendStatus?.database === 'connected';
+
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -20,7 +22,7 @@ export default function Header({ backendStatus, onRefreshStatus, isCheckingStatu
                   QueryMind <span className="text-indigo-600">AI</span>
                 </h1>
                 <span className="text-xs px-2 py-0.5 font-medium rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                  v1.0.0 (Day 2)
+                  v1.0.0 (Day 3)
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium">
@@ -37,26 +39,39 @@ export default function Header({ backendStatus, onRefreshStatus, isCheckingStatu
               <span>MOCK PIPELINE</span>
             </div>
 
+            {/* PostgreSQL DB Status */}
+            <div
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${
+                isDbConnected
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : 'bg-slate-100 text-slate-600 border-slate-200'
+              }`}
+              title={isDbConnected ? "PostgreSQL database is connected" : "PostgreSQL database is currently disconnected"}
+            >
+              <Server className={`w-3.5 h-3.5 ${isDbConnected ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <span>DB: {isDbConnected ? 'Connected' : 'Offline'}</span>
+            </div>
+
             {/* Backend Connectivity Status */}
             <div
               className={`flex items-center space-x-2 px-3 py-1 rounded-md text-xs font-medium border ${
-                backendStatus.healthy
+                backendStatus?.healthy
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                   : 'bg-rose-50 text-rose-800 border-rose-200'
               }`}
             >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  backendStatus.healthy ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                  backendStatus?.healthy ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
                 }`}
               />
               <span>
-                {backendStatus.healthy ? 'Backend Connected' : 'Backend Disconnected'}
+                {backendStatus?.healthy ? 'Backend Connected' : 'Backend Disconnected'}
               </span>
               <button
                 onClick={onRefreshStatus}
                 disabled={isCheckingStatus}
-                title="Refresh backend status"
+                title="Refresh status"
                 className="ml-1 p-0.5 text-slate-400 hover:text-slate-700 rounded transition"
               >
                 <RefreshCw
@@ -70,4 +85,3 @@ export default function Header({ backendStatus, onRefreshStatus, isCheckingStatu
     </header>
   );
 }
-

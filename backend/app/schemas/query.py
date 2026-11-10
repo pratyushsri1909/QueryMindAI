@@ -30,23 +30,26 @@ class IntermediateRepresentation(BaseModel):
 
 
 class ExecutionResult(BaseModel):
-    """Execution metadata and tabular results (mock execution for Day 2)."""
+    """Execution metadata and tabular results (mock or real PostgreSQL execution)."""
 
     status: str = Field(
         default="mock_success",
-        description="Execution status code (mock_success for Day 2)",
+        description="Execution status code (mock_success or database_success)",
     )
     columns: List[str] = Field(
-        ..., description="Result column header names"
+        default_factory=list, description="Result column header names"
     )
     rows: List[List[Any]] = Field(
-        ..., description="Result row records matching the columns"
+        default_factory=list, description="Result row records matching the columns"
     )
     row_count: int = Field(
-        ..., description="Total number of returned records"
+        default=0, description="Total number of returned records"
     )
     execution_time_ms: int = Field(
-        ..., description="Execution latency in milliseconds"
+        default=0, description="Execution latency in milliseconds"
+    )
+    error: Optional[str] = Field(
+        default=None, description="Execution error detail if query failed"
     )
 
 
@@ -57,6 +60,10 @@ class QueryRequest(BaseModel):
         ...,
         description="Natural language database query string",
         examples=["Show students with CGPA above 8.5"],
+    )
+    execution_mode: Optional[str] = Field(
+        default=None,
+        description="Optional execution mode override: 'mock' or 'database'. Defaults to QUERYMIND_MODE.",
     )
 
     @field_validator("query")
@@ -73,6 +80,17 @@ class QueryRequest(BaseModel):
                 f"Query exceeds maximum allowed length of 500 characters (received {len(trimmed)})."
             )
         return trimmed
+
+    @field_validator("execution_mode")
+    @classmethod
+    def validate_mode(cls, value: Optional[str]) -> Optional[str]:
+        """Validate optional execution mode parameter."""
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if normalized not in ("mock", "database"):
+            raise ValueError("execution_mode must be either 'mock' or 'database'.")
+        return normalized
 
 
 class QueryResponse(BaseModel):
@@ -96,4 +114,3 @@ class QueryResponse(BaseModel):
     execution: ExecutionResult = Field(
         ..., description="Tabular results and execution metadata"
     )
-
