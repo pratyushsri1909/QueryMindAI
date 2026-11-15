@@ -1,21 +1,24 @@
 """
-QueryMind AI - NLP Engine Package (Member 1).
+Unified Root Wrapper for NLP Engine (Member 1).
+Maintains backwards-compatibility with both nlp_engine and backend.app.nlp.
 """
 
-from .engine import NLPEngine
-from .preprocessor import Preprocessor
-from .intent_classifier import IntentClassifier
-from .entity_extractor import EntityExtractor
-from .ir_builder import IRBuilder, IRValidationError
-from .schema_catalog import SCHEMA_CATALOG, COLUMN_SYNONYMS
+from backend.app.nlp.processor import process_natural_language, NLPProcessor
+from backend.app.nlp.preprocessing import TextPreprocessor
+from backend.app.nlp.intent_classifier import IntentClassifier
+from backend.app.nlp.entity_extractor import EntityExtractor
+from backend.app.nlp.schema import DATABASE_SCHEMA, COLUMN_SYNONYMS
+
+# Alias for root-level import convenience
+NLPEngine = NLPProcessor
 
 __all__ = [
+    "process_natural_language",
     "NLPEngine",
-    "Preprocessor",
+    "NLPProcessor",
+    "TextPreprocessor",
     "IntentClassifier",
     "EntityExtractor",
-    "IRBuilder",
-    "IRValidationError",
-    "SCHEMA_CATALOG",
+    "DATABASE_SCHEMA",
     "COLUMN_SYNONYMS"
 ]

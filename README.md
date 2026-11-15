@@ -1,66 +1,68 @@
-# QueryMind AI — Natural Language to SQL Query Assistant
-## Member 1 Deliverables: NLP Engine (Core Natural Language Understanding)
-
-This repository contains the complete deliverables for **Member 1 (NLP Engine)** for the **QueryMind AI** project, as specified in the team implementation plan.
+# QueryMind AI — Member 1: NLP Module
+### Team Integration Contract Version 1.0 Compliant
 
 ---
 
-## 📁 Deliverables Directory & Documents
+## 📌 Overview
+This module represents the complete, independent implementation of **Member 1 (NLP Module)** for the **QueryMind AI** natural language-to-SQL system.
 
-| Document / Deliverable | File Name | Description |
-| :--- | :--- | :--- |
-| **LID (Logical Input Design)** | [`LID_Logical_Input_Design.md`](LID_Logical_Input_Design.md) | Logical structure of inputs, sanitization, token structures, slot schemas, and IR JSON contract. |
-| **HID (Hierarchical Input Design)** | [`HID_Hierarchical_Input_Design.md`](HID_Hierarchical_Input_Design.md) | Hierarchical module decomposition chart, submodules (1.0 to 6.0), and data flow model. |
-| **Flow File (Flowchart File)** | [`FLOW_NLP_Engine_Workflow.md`](FLOW_NLP_Engine_Workflow.md) | Step-by-step lifecycle workflow diagrams (Mermaid & state diagrams) and execution traces. |
-| **Decision File (Decision Logic)** | [`DECISION_Logic_File.md`](DECISION_Logic_File.md) | Decision logic tables for intent classification, schema mapping, operators, order/limit, and fallbacks. |
-| **Code File (Source Code)** | [`nlp_engine/`](nlp_engine/) | Modular, production-ready Python package implementing the complete NLP Engine. |
-| **Test Suite** | [`test_nlp_engine.py`](test_nlp_engine.py) | Comprehensive test suite verifying intent classification, slot extraction, and IR validation. |
-| **Interactive Demo** | [`demo.py`](demo.py) | Interactive runner demonstrating queries turning into structured IR JSON. |
+The module is responsible for:
+1. Ingesting plain English questions from users.
+2. Performing query preprocessing (tokenization, cleaning, lemmatization, POS tagging).
+3. Classifying user intent (`SELECT`, `FILTER`, `AGGREGATE`).
+4. Extracting schema entities (tables: `students`, `courses`, `enrollments`, columns, predicates, joins, aggregations, group by, order by, limit).
+5. Outputting the standardized **Intermediate Representation (IR)** JSON dictionary or structured error response.
 
 ---
 
-## 🏗️ Architecture of Member 1 (NLP Engine)
+## 📁 Project Structure
 
 ```
-nlp_engine/
-├── __init__.py           # Package exports (NLPEngine, Preprocessor, etc.)
-├── schema_catalog.py     # Database schema, tables, columns, and domain synonym mappings
-├── preprocessor.py       # Tokenizer, case normalizer, stop-word filter, lemmatizer, POS tagger
-├── intent_classifier.py  # Intent classifier (RETRIEVAL, FILTER, COUNT, AGGREGATION, SORT)
-├── entity_extractor.py   # Extracts tables, columns, relational operators, limits & ordering
-├── ir_builder.py         # Assembles and validates the Intermediate Representation (IR) JSON contract
-└── engine.py             # Main NLPEngine orchestrator pipeline
+.
+├── backend/
+│   ├── app/
+│   │   └── nlp/
+│   │       ├── __init__.py           # Exports public function: process_natural_language
+│   │       ├── processor.py          # Main NLPProcessor and process_natural_language implementation
+│   │       ├── preprocessing.py      # Tokenizer, stop-word filter, lemmatizer, POS tagger
+│   │       ├── intent_classifier.py  # Classifies into SELECT, FILTER, AGGREGATE
+│   │       ├── entity_extractor.py   # Extracts tables, columns, conditions, joins, aggregations
+│   │       └── schema.py             # Schema definition & synonyms for students, courses, enrollments
+│   └── tests/
+│       └── test_nlp.py               # Integration test for backend test runners
+├── test_nlp_engine.py                # 10 test cases covering all 9 mandatory contract queries
+├── demo.py                           # Interactive CLI demo showcasing all 9 test queries
+├── LID_Logical_Input_Design.md       # Logical Input Design document
+├── HID_Hierarchical_Input_Design.md  # Hierarchical Input Design document
+├── FLOW_NLP_Engine_Workflow.md       # Flowchart and workflow document
+└── DECISION_Logic_File.md            # Decision logic and decision tables document
 ```
 
 ---
 
-## 🚀 How to Run
+## 🔌 Public Interface & How to Invoke
 
-### 1. Run Unit & Integration Tests
-```bash
-python test_nlp_engine.py
-```
+In compliance with **Section 3 of Team Integration Contract Version 1.0**:
 
-### 2. Run Interactive Live Demo
-```bash
-python demo.py
-```
-
-### 3. Use in Python Code
 ```python
-from nlp_engine import NLPEngine
-import json
+from backend.app.nlp import process_natural_language
 
-engine = NLPEngine()
+# Example query:
+query = "Show students with CGPA above 8.5"
 
-# Example query from the project specification:
-query = "Show all students having CGPA greater than 8.5"
-ir = engine.process_query(query)
-
-print(json.dumps(ir, indent=2))
+# Generate Canonical IR:
+ir = process_natural_language(query)
+print(ir)
 ```
 
-#### Output:
+### Sample Input & Output
+
+#### Input:
+```text
+Show students with CGPA above 8.5
+```
+
+#### Output (Canonical IR Version 1.0):
 ```json
 {
   "intent": "FILTER",
@@ -76,13 +78,41 @@ print(json.dumps(ir, indent=2))
       "value": 8.5
     }
   ],
-  "order_by": null,
-  "limit": null,
-  "confidence_score": 0.94
+  "joins": [],
+  "aggregations": [],
+  "group_by": [],
+  "order_by": [],
+  "limit": null
+}
+```
+
+#### Error Output Example:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNSUPPORTED_QUERY",
+    "message": "Input query cannot be empty or whitespace."
+  }
 }
 ```
 
 ---
 
-## 🤝 Integration Contract (Handoff to Member 2)
-The NLP module converts natural language into the agreed-upon Intermediate Representation (IR) JSON, which **Member 2 (Database & SQL Engine)** consumes directly to construct safe PostgreSQL queries.
+## 🧪 Mandatory Test Cases (Contract Section 9)
+
+Run the test suite using:
+```bash
+python test_nlp_engine.py
+```
+
+All 9 mandatory queries from the Team Integration Contract pass with 100% success:
+1. `Show all students` $\rightarrow$ `intent: SELECT`, `table: students`
+2. `Show students with CGPA above 8.5` $\rightarrow$ `intent: FILTER`, `cgpa > 8.5`
+3. `Find students from CSE department` $\rightarrow$ `intent: FILTER`, `department = 'CSE'`
+4. `Show students in descending CGPA order` $\rightarrow$ `order_by: [{"column": "cgpa", "direction": "DESC"}]`
+5. `Show the top 5 students` $\rightarrow$ `limit: 5`, `order_by: DESC`
+6. `Count all students` $\rightarrow$ `intent: AGGREGATE`, `COUNT(*)`
+7. `Find average CGPA` $\rightarrow$ `intent: AGGREGATE`, `AVG(cgpa)`
+8. `Show students enrolled in each course` $\rightarrow$ `joins: [enrollments INNER JOIN]`
+9. `Find average CGPA department-wise` $\rightarrow$ `group_by: ["department"]`, `AVG(cgpa)`
