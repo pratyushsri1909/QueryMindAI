@@ -17,6 +17,26 @@ else:
     load_dotenv()
 
 
+DEFAULT_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+
+def load_cors_origins() -> List[str]:
+    """Read comma-separated allowed origins from CORS_ORIGINS."""
+    configured = os.getenv("CORS_ORIGINS")
+    if configured is None:
+        return list(DEFAULT_CORS_ORIGINS)
+    return [
+        origin.strip().rstrip('/')
+        for origin in configured.split(',')
+        if origin.strip()
+    ]
+
+
 class Settings(BaseModel):
     """Core application settings, database configuration, and CORS policies."""
 
@@ -43,12 +63,7 @@ class Settings(BaseModel):
         default_factory=lambda: int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "5000"))
     )
 
-    cors_origins: List[str] = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
+    cors_origins: List[str] = Field(default_factory=load_cors_origins)
 
 
 settings = Settings()

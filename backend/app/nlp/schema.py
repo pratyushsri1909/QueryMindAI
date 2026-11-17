@@ -39,7 +39,7 @@ DATABASE_SCHEMA: Dict[str, Dict[str, Any]] = {
             "enrollment_id": "INTEGER",
             "student_id": "INTEGER",
             "course_id": "INTEGER",
-            "semester": "INTEGER",
+            "semester": "VARCHAR",
             "grade": "VARCHAR"
         },
         "default_columns": ["enrollment_id", "student_id", "course_id", "semester", "grade"],

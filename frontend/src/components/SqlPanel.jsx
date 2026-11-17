@@ -4,7 +4,7 @@ import { Terminal, Copy, Check, Code } from 'lucide-react';
 /**
  * SqlPanel component displaying the synthesized SQL query with one-click clipboard copy.
  */
-export default function SqlPanel({ sqlQuery }) {
+export default function SqlPanel({ sqlQuery, params = {} }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -66,11 +66,22 @@ export default function SqlPanel({ sqlQuery }) {
         </pre>
       </div>
 
+      {params && Object.keys(params).length > 0 && (
+        <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">
+            Bound Parameters
+          </p>
+          <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap">
+            {JSON.stringify(params, null, 2)}
+          </pre>
+        </div>
+      )}
+
       {/* Footer Info */}
       <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
         <span className="flex items-center space-x-1">
           <Code className="w-3 h-3 text-slate-400" />
-          <span>Synthesized from Intermediate Representation (IR) via Mock SQL Engine</span>
+          <span>Synthesized from the validated Intermediate Representation (IR)</span>
         </span>
         <span className="font-medium text-slate-400">Read-Only Safe Target</span>
       </div>

@@ -227,7 +227,7 @@ export default function App() {
             <ExecutionInfo result={queryResult} />
 
             {/* Generated SQL Panel */}
-            <SqlPanel sqlQuery={queryResult.generated_sql} />
+            <SqlPanel sqlQuery={queryResult.generated_sql} params={queryResult.params} />
 
             {/* Dynamic Results Table */}
             <ResultsTable execution={queryResult.execution} />

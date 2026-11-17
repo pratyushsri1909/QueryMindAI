@@ -1,13 +1,12 @@
 # QueryMind AI — Natural Language to SQL Query Assistant
 
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3119/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-1.0.0-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-web%20API-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791.svg?logo=postgresql)](https://www.postgresql.org/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-d71f00.svg)](https://www.sqlalchemy.org/)
 [![React](https://img.shields.io/badge/React-18.3-61dafb.svg?logo=react)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-6.1-646cff.svg?logo=vite)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38bdf8.svg?logo=tailwindcss)](https://tailwindcss.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 QueryMind AI is an academic and enterprise-oriented Natural Language to SQL (NL-to-SQL) assistant. It allows non-technical stakeholders—such as university administrators, researchers, students, and business analysts—to query relational databases (PostgreSQL) using intuitive, plain English rather than manually composing complex SQL queries.
 
@@ -46,7 +45,7 @@ QueryMind AI connects natural language to database execution through a modular f
 
 > **Architecture & Independence Notice:**  
 > - **Mock Mode (Default):** Preserves the functioning Day 2 prototype using deterministic mock NLP and SQL modules. It requires no live PostgreSQL server to run or test.
-> - **Database Mode:** Utilizes the Day 3 PostgreSQL database foundation (`students`, `courses`, `enrollments`) with SQLGlot AST read-only enforcement. Real ML/NLP intent parsing will be completed by Member 1, and final SQL schema mapping will be finalized by Member 2.
+> - **Database Mode:** Uses the current rule-based NLP processor and parameterized SQL engine, followed by SQLGlot read-only validation and PostgreSQL execution. The current NLP implementation is rule-based; do not describe it as a trained ML model or LLM.
 
 ---
 
@@ -75,8 +74,8 @@ QueryMind AI is collaboratively developed by a three-member engineering team wit
 
 | Team Member | Domain Responsibility | Current Deliverables & Scope |
 | :--- | :--- | :--- |
-| **Member 1** | **NLP Engine** | Preprocessing, tokenization, intent classification, entity extraction, and Intermediate Representation (IR) generation. *(Day 2: Mock NLP prototype)* |
-| **Member 2** | **Database & SQL Engine** | Schema mapping catalog, SQL generation, SQLGlot AST validation, read-only security enforcement, and PostgreSQL execution. *(Day 2: Mock SQL synthesizer; Day 3: Foundation prepared)* |
+| **Member 1** | **NLP Engine** | Rule-based preprocessing, tokenization, lemmatization, intent classification, entity extraction, and canonical Intermediate Representation (IR) generation. |
+| **Member 2** | **Database & SQL Engine** | Approved-schema mapping, parameterized SQL generation, SQL-engine IR validation, and read-only PostgreSQL execution through the shared database service. |
 | **Member 3 (Current)** | **Backend, Frontend & Integration** | FastAPI architecture, Pydantic contracts, PostgreSQL foundation, safe execution service, CORS configuration, automated test suites, React + Vite web dashboard. *(Day 1, Day 2 & Day 3 Completed)* |
 
 ---
@@ -129,12 +128,14 @@ Comprehensive engineering specifications are cataloged inside the [`docs/`](docs
 - [x] Schema initializer script (`app.database.init_db`).
 - [x] Dual execution mode support (`QUERYMIND_MODE=mock` vs `QUERYMIND_MODE=database`).
 - [x] Health check database status reporting (`/health?include_db=true` and `/api/v1/health`).
-- [x] 37 automated backend tests passing across all three days (`pytest -v`).
+- [x] Backend unit, security, and integration tests are maintained under `backend/tests/` and the root NLP test module; CI runs them on pushes and pull requests.
 - [x] Direct PostgreSQL inspection endpoints (`/api/v1/database/health`, `/database/students`, `/database/courses`, `/database/enrollments`).
 
-### Planned (Future Iterations):
-- [ ] Member 1: Real spaCy/NLTK pipeline and machine learning intent classifier.
-- [ ] Member 2: Final SQL schema mapping catalog and PostgreSQL AST translation.
+### Remaining Release Decisions:
+- [ ] Confirm whether a dedicated `departments` table is required. The original team plan lists it, but the current ORM, NLP schema, and SQL allowlist contain only `students`, `courses`, and `enrollments`, with department stored as a text column.
+- [ ] Configure production PostgreSQL credentials and the deployed frontend origin before enabling `QUERYMIND_MODE=database`.
+- [ ] Select hosting providers and configure deployment secrets outside the repository.
+- [ ] Agree on a repository license with all contributors before adding a license file.
 
 ---
 
@@ -173,10 +174,14 @@ Transforms a natural language string into ANSI/PostgreSQL via the pipeline and e
         "value": 8.5
       }
     ],
+    "joins": [],
+    "aggregations": [],
+    "group_by": [],
     "order_by": null,
     "limit": null
   },
   "generated_sql": "SELECT name, cgpa FROM students WHERE cgpa > 8.5;",
+  "params": {},
   "execution": {
     "status": "mock_success",
     "columns": ["name", "cgpa"],
@@ -356,13 +361,15 @@ Fetches actual enrollment records directly from PostgreSQL with joined student a
 
 ---
 
-### Step 1: Clone Repository & Switch to Feature Branch
+### Step 1: Clone the Current Release Branch
 
 ```bash
 git clone https://github.com/pratyushsri1909/QueryMindAI.git
 cd QueryMindAI
-git checkout feature/application
+git checkout main
 ```
+
+Use `main` for the integrated release. The `feature/application` branch is behind `main` and does not contain the latest SQL-engine changes.
 
 ---
 
@@ -393,7 +400,8 @@ git checkout feature/application
    ```bash
    cp .env.example .env
    # Default: QUERYMIND_MODE=mock
-   # Set QUERYMIND_MODE=database to enable PostgreSQL execution
+   # Set QUERYMIND_MODE=database to use the real NLP + SQL engine + PostgreSQL pipeline
+   # Set CORS_ORIGINS to comma-separated deployed frontend origins
    ```
 
 5. Run all automated Pytest tests:
@@ -433,12 +441,9 @@ See [`docs/DATABASE_SETUP.md`](docs/DATABASE_SETUP.md) for detailed configuratio
 1. Open a new terminal and navigate to the frontend directory:
    ```bash
    cd frontend
-   npm install
+   npm ci
    npm run dev
    ```
-
-The web dashboard is accessible at:
-- **Local URL:** [http://localhost:5173/](http://localhost:5173/)
 
 ---
 
@@ -451,3 +456,19 @@ The web dashboard is accessible at:
 | **AST Security** | N/A | SQLGlot AST inspection enforcing single read-only `SELECT` |
 | **Response Status** | `mock_success` | `database_success` (or `error` if offline) |
 | **Use Case** | Day 2 UI verification, frontend prototyping | Live database querying & verification |
+
+---
+
+## 10. Production Deployment Checklist
+
+The repository does not currently include provider-specific deployment manifests. Before public deployment:
+
+1. Provision PostgreSQL and set `QUERYMIND_MODE=database`.
+2. Set `DATABASE_URL` in the backend host's secret/environment settings. Never commit `.env` or database credentials.
+3. Set `CORS_ORIGINS` to the exact frontend origin(s), comma-separated. Do not use `*` with credentialed CORS.
+4. Run `python -m app.database.init_db` and `python -m app.database.seed` from `backend/` as a controlled database setup step.
+5. Deploy the backend as an ASGI service from `backend/`, using `uvicorn app.main:app --host 0.0.0.0 --port <host-port>`.
+6. Set frontend build variable `VITE_API_BASE_URL` to the deployed backend URL, then run `npm ci` and `npm run build` from `frontend/` and publish the generated `dist/` directory.
+7. Verify health endpoints, filtered queries, aggregate queries, JOIN queries, empty results, and rejected out-of-domain queries against the deployed service.
+
+The current NLP implementation is rule-based. Do not describe it as a trained machine-learning model or LLM-powered system unless that capability is added and evaluated.

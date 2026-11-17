@@ -115,9 +115,15 @@ export async function executeQuery(query, executionMode = null) {
         const msg = data.detail.map((d) => d.msg || d.message).join('; ');
         throw new Error(`Validation Error: ${msg}`);
       }
-      throw new Error(`Validation Error: ${data.detail}`);
+      const detailMessage =
+        typeof data.detail === 'string'
+          ? data.detail
+          : data.detail.message || JSON.stringify(data.detail);
+      throw new Error(`Validation Error: ${detailMessage}`);
     }
-    throw new Error(data.detail || data.message || `Request failed with HTTP ${response.status}`);
+    const errorDetail =
+      typeof data.detail === 'string' ? data.detail : data.detail?.message;
+    throw new Error(errorDetail || data.message || `Request failed with HTTP ${response.status}`);
   }
 
   return data;

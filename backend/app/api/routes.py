@@ -18,8 +18,10 @@ from app.schemas.database import (
     EnrollmentListResponse,
     EnrollmentRecord,
 )
-from app.nlp.mock_nlp import process_natural_language
-from app.sql_engine.mock_sql_engine import process_ir
+from app.nlp import process_natural_language as process_live_nlp
+from app.nlp.mock_nlp import process_natural_language as process_mock_nlp
+from app.sql_engine import process_ir as generate_live_sql
+from app.sql_engine.mock_sql_engine import process_ir as generate_mock_sql
 from app.database.session import get_db, get_engine, check_db_connection
 from app.database.models import Student, Course, Enrollment
 from app.services.database_service import execute_read_query
@@ -202,7 +204,7 @@ def get_enrollments(db: Session = Depends(get_db)) -> EnrollmentListResponse:
 
 
 # ---------------------------------------------------------------------------
-# Natural Language Query Pipeline Endpoint (Day 2 Mock / Day 3 DB Routing)
+# Natural Language Query Pipeline Endpoint (Mock and Live Database Modes)
 # ---------------------------------------------------------------------------
 @router.post(
     "/query",
@@ -210,46 +212,70 @@ def get_enrollments(db: Session = Depends(get_db)) -> EnrollmentListResponse:
     status_code=status.HTTP_200_OK,
     summary="Process Natural Language Query",
     description=(
-        "Transforms a natural language query via NLP into an Intermediate Representation (IR), "
-        "synthesizes SQL, and executes it via the configured mode (mock or PostgreSQL database)."
+        "Transforms a natural-language query into an IR, generates SQL, and "
+        "executes it in mock or PostgreSQL database mode."
     ),
 )
 def handle_query(request: QueryRequest) -> QueryResponse:
-    """End-to-end integration pipeline endpoint for natural language query processing."""
+    # Run the mock prototype or the real NLP -> SQL -> PostgreSQL pipeline.
     try:
-        # Step 1: Input query is validated by Pydantic QueryRequest
         raw_query = request.query
-        effective_mode = request.execution_mode or settings.querymind_mode
+        effective_mode = (
+            request.execution_mode or settings.querymind_mode
+        ).strip().lower()
 
-        # Step 2: NLP module processing (mock implementation)
-        ir = process_natural_language(raw_query)
+        if effective_mode not in {"mock", "database"}:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    "Server configuration error: QUERYMIND_MODE must be "
+                    "'mock' or 'database'."
+                ),
+            )
 
-        # Step 3: SQL generation from IR
-        engine_result = process_ir(ir)
-        generated_sql = engine_result["generated_sql"]
-
-        # Step 4: Execution routing based on effective mode
-        if effective_mode == "database":
-            db_conn = check_db_connection()
-            if not db_conn["connected"]:
-                execution_payload = {
-                    "status": "error",
-                    "columns": [],
-                    "rows": [],
-                    "row_count": 0,
-                    "execution_time_ms": 0,
-                    "error": (
-                        f"Database is disconnected ({db_conn['error'] or 'Connection refused'}). "
-                        "Ensure PostgreSQL is running and DATABASE_URL is configured."
-                    ),
-                }
-            else:
-                execution_payload = execute_read_query(generated_sql)
-        else:
-            # Default: Day 2 deterministic mock execution
+        if effective_mode == "mock":
+            # Keep the deterministic offline demo working.
+            ir = process_mock_nlp(raw_query)
+            engine_result = generate_mock_sql(ir)
+            generated_sql = engine_result["generated_sql"]
+            sql_params: Dict[str, Any] = {}
             execution_payload = engine_result["execution"]
+        else:
+            # Database mode uses the real canonical NLP and SQL modules.
+            ir = process_live_nlp(raw_query)
+            if ir.get("success") is False:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=ir.get("error") or {
+                        "code": "INVALID_IR",
+                        "message": "The NLP module could not interpret this query.",
+                    },
+                )
 
-        # Step 5: Assemble and return QueryResponse
+            engine_result = generate_live_sql(ir)
+            if engine_result.get("success") is not True:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=engine_result.get("error") or {
+                        "code": "SQL_GENERATION_FAILED",
+                        "message": "The SQL engine could not generate a safe query.",
+                    },
+                )
+
+            generated_sql = engine_result["generated_sql"]
+            sql_params = engine_result.get("params", {})
+            # Values remain separate from SQL text. The execution service
+            # validates the SQL with SQLGlot before executing it.
+            execution_payload = execute_read_query(
+                generated_sql,
+                params=sql_params,
+            )
+            # If database execution failed due to connection failure, normalize message
+            if execution_payload.get("status") == "error":
+                err = execution_payload.get("error") or ""
+                if "connection" in err.lower() or "timeout" in err.lower() or "refused" in err.lower() or "permission denied" in err.lower():
+                    execution_payload["error"] = f"Database is disconnected ({err})"
+
         return QueryResponse(
             success=execution_payload.get("status") != "error",
             message=(
@@ -261,13 +287,16 @@ def handle_query(request: QueryRequest) -> QueryResponse:
             intent=ir.get("intent", "UNKNOWN"),
             ir=ir,
             generated_sql=generated_sql,
+            params=sql_params,
             execution=execution_payload,
         )
+
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.exception("Unexpected error in query processing pipeline: %s", exc)
+    except Exception:
+        logger.exception("Unexpected error in query processing pipeline")
+        # Keep stack traces in server logs; do not expose internals to clients.
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected internal error occurred during query processing: {str(exc)}",
-        ) from exc
+            detail="An unexpected internal error occurred during query processing.",
+        )
