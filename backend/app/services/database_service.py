@@ -60,8 +60,27 @@ RESTRICTED_SYSTEM_TABLES = {
     "pg_indexes",
 }
 
-# Dangerous PostgreSQL administrative, file I/O, and termination functions
+# Dangerous PostgreSQL administrative, sequence, notification, lock, file I/O, and termination functions
 RESTRICTED_FUNCTIONS = {
+    # Sequence Modification & Mutation Functions
+    "nextval",
+    "setval",
+    "currval",
+    "lastval",
+    # Advisory Locks & Inter-Process Locking
+    "pg_advisory_lock",
+    "pg_advisory_lock_shared",
+    "pg_advisory_unlock",
+    "pg_advisory_unlock_all",
+    "pg_advisory_unlock_shared",
+    "pg_advisory_xact_lock",
+    "pg_advisory_xact_lock_shared",
+    "pg_try_advisory_lock",
+    "pg_try_advisory_lock_shared",
+    "pg_try_advisory_xact_lock",
+    "pg_try_advisory_xact_lock_shared",
+    # Inter-Process Messaging & Notifications
+    "pg_notify",
     # Denial of Service & Timing Delays
     "pg_sleep",
     "pg_sleep_for",
@@ -71,6 +90,11 @@ RESTRICTED_FUNCTIONS = {
     "pg_read_binary_file",
     "pg_write_file",
     "pg_write_binary_file",
+    "pg_ls_dir",
+    "pg_ls_waldir",
+    "pg_ls_archive_statusdir",
+    "pg_ls_tmpdir",
+    "pg_stat_file",
     "lo_export",
     "lo_import",
     "lo_create",
@@ -80,6 +104,117 @@ RESTRICTED_FUNCTIONS = {
     "pg_cancel_backend",
     "pg_reload_conf",
     "pg_rotate_logfile",
+    "pg_create_restore_point",
+    "pg_switch_wal",
+    "set_config",
+    # Remote Execution & XML / Catalog Dumping
+    "dblink",
+    "dblink_exec",
+    "dblink_connect",
+    "query_to_xml",
+    "query_to_xml_and_xmlschema",
+    "query_to_xmlschema",
+    "cursor_to_xml",
+    "cursor_to_xmlschema",
+    "table_to_xml",
+    "table_to_xml_and_xmlschema",
+    "table_to_xmlschema",
+}
+
+# Safe approved read-only functions (Allowlist)
+SAFE_FUNCTIONS_ALLOWLIST = {
+    # Standard Aggregate Functions
+    "count",
+    "sum",
+    "avg",
+    "min",
+    "max",
+    "stddev",
+    "stddev_pop",
+    "stddev_samp",
+    "variance",
+    "var_pop",
+    "var_samp",
+    # Math & Numeric Functions
+    "round",
+    "trunc",
+    "floor",
+    "ceil",
+    "ceiling",
+    "abs",
+    "sign",
+    "power",
+    "pow",
+    "sqrt",
+    "cbrt",
+    "mod",
+    "exp",
+    "ln",
+    "log",
+    "log10",
+    "pi",
+    "degrees",
+    "radians",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "atan2",
+    # String Manipulation & Formatting
+    "lower",
+    "upper",
+    "trim",
+    "ltrim",
+    "rtrim",
+    "btrim",
+    "length",
+    "char_length",
+    "character_length",
+    "concat",
+    "concat_ws",
+    "substr",
+    "substring",
+    "replace",
+    "left",
+    "right",
+    "position",
+    "strpos",
+    "split_part",
+    "initcap",
+    "lpad",
+    "rpad",
+    "reverse",
+    "repeat",
+    "to_char",
+    "to_date",
+    "to_number",
+    "to_timestamp",
+    "ascii",
+    "chr",
+    "md5",
+    # Temporal & Date/Time (Read-Only)
+    "now",
+    "current_date",
+    "current_time",
+    "current_timestamp",
+    "currenttimestamp",
+    "localtime",
+    "localtimestamp",
+    "date_trunc",
+    "datetrunc",
+    "timestamp_trunc",
+    "timestamptrunc",
+    "extract",
+    "age",
+    "date_part",
+    # Conditional & Utility
+    "coalesce",
+    "nullif",
+    "greatest",
+    "least",
+    "cast",
 }
 
 # Forbidden SQL AST node types
@@ -96,6 +231,14 @@ FORBIDDEN_AST_NODES = (
     exp.Rollback,
     exp.TruncateTable,
     exp.Into,
+    exp.Merge,
+    exp.Set,
+    exp.Pragma,
+    exp.Grant,
+    exp.Revoke,
+    exp.Copy,
+    exp.Lock,
+    exp.Analyze,
 )
 
 
@@ -157,20 +300,53 @@ def validate_sql(sql: str) -> Tuple[bool, Optional[str]]:
         if t_name in RESTRICTED_SYSTEM_TABLES:
             return False, f"Security violation: Access to system catalog table '{t_name}' is prohibited."
 
-    # Step 7: Verify function calls against dangerous administrative functions
-    for f in expr.find_all((exp.Anonymous, exp.Func)):
-        func_name = ""
-        if isinstance(f, exp.Anonymous):
-            func_name = f.this.lower() if isinstance(f.this, str) else str(f.this).lower()
-        elif hasattr(f, "sql_name") and callable(f.sql_name):
-            func_name = f.sql_name().lower()
-        elif hasattr(f, "name") and f.name:
-            func_name = f.name.lower()
-        else:
-            func_name = f.key.lower()
+    # Step 6b: Verify schema qualifiers in Dot expressions (e.g. pg_catalog.pg_sleep)
+    for dot in expr.find_all(exp.Dot):
+        s_name = dot.this.name.lower() if hasattr(dot.this, "name") and dot.this.name else str(dot.this).lower()
+        if s_name in RESTRICTED_SYSTEM_SCHEMAS:
+            return False, f"Security violation: Access to system schema '{s_name}' is prohibited."
 
-        if func_name in RESTRICTED_FUNCTIONS:
-            return False, f"Security violation: Execution of administrative function '{func_name}' is prohibited."
+    # Step 7: Verify function calls against restricted functions and safe allowlist
+    for f in expr.find_all((exp.Anonymous, exp.Func)):
+        # Skip operator expressions (e.g. AND, OR, +, -) that inherit from exp.Func in SQLGlot
+        if isinstance(f, (exp.Binary, exp.Connector, exp.Unary)):
+            continue
+
+        names_to_check = set()
+        if isinstance(f, exp.Anonymous):
+            raw_this = f.this if isinstance(f.this, str) else getattr(f.this, "this", str(f.this))
+            if raw_this:
+                names_to_check.add(str(raw_this).lower().strip())
+            if f.name:
+                names_to_check.add(f.name.lower().strip())
+        else:
+            if hasattr(f, "sql_name") and callable(f.sql_name):
+                sn = f.sql_name()
+                if sn and sn.upper() != "ANONYMOUS":
+                    names_to_check.add(sn.lower().strip())
+            if hasattr(f, "key") and f.key:
+                names_to_check.add(f.key.lower().strip())
+            if hasattr(f, "name") and f.name and f.name != "*":
+                names_to_check.add(f.name.lower().strip())
+
+        # Check against restricted functions and dangerous prefix patterns
+        for fn in names_to_check:
+            if (
+                fn in RESTRICTED_FUNCTIONS
+                or fn.startswith("pg_advisory_")
+                or fn.startswith("pg_try_advisory_")
+                or fn.startswith("pg_sleep")
+                or fn.startswith("pg_read_")
+                or fn.startswith("pg_write_")
+                or fn.startswith("lo_")
+                or (fn.startswith("pg_") and fn not in SAFE_FUNCTIONS_ALLOWLIST)
+            ):
+                return False, f"Security violation: Execution of administrative function '{fn}' is prohibited."
+
+        # Allowlist enforcement: only explicitly approved read-only functions are permitted
+        if not any(fn in SAFE_FUNCTIONS_ALLOWLIST for fn in names_to_check):
+            primary_name = list(names_to_check)[0] if names_to_check else "unknown"
+            return False, f"Security violation: Execution of unapproved function '{primary_name}' is prohibited."
 
     return True, None
 
@@ -265,17 +441,22 @@ def execute_read_query(
     try:
         # Determine execution context (Session vs Engine)
         if session is not None:
-            # Session-based execution: enforce transaction-local statement timeout for PostgreSQL
+            # Session-based execution: enforce transaction-local read-only mode and statement timeout for PostgreSQL
             bind = session.get_bind() if hasattr(session, "get_bind") else None
             dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
-            if dialect_name == "postgresql" and timeout_duration > 0:
+            if dialect_name == "postgresql":
                 try:
-                    session.execute(
-                        text("SELECT set_config('statement_timeout', :t_val, true)"),
-                        {"t_val": str(int(timeout_duration))},
-                    )
-                except Exception as t_err:
-                    logger.debug("Could not set session statement_timeout: %s", t_err)
+                    session.execute(text("SELECT set_config('transaction_read_only', 'on', true)"))
+                except Exception as ro_err:
+                    logger.debug("Could not set session transaction_read_only: %s", ro_err)
+                if timeout_duration > 0:
+                    try:
+                        session.execute(
+                            text("SELECT set_config('statement_timeout', :t_val, true)"),
+                            {"t_val": str(int(timeout_duration))},
+                        )
+                    except Exception as t_err:
+                        logger.debug("Could not set session statement_timeout: %s", t_err)
 
             result = session.execute(text(sql), query_params)
             columns: List[str] = list(result.keys()) if result.returns_rows else []
@@ -284,17 +465,23 @@ def execute_read_query(
                 [_serialize_value(cell) for cell in row] for row in raw_rows
             ]
         else:
-            # Direct engine connection execution: enforce connection statement timeout for PostgreSQL
+            # Direct engine connection execution: enforce read-only transaction and statement timeout for PostgreSQL
             eng = engine or get_engine()
             with eng.connect() as conn:
-                if eng.dialect.name == "postgresql" and timeout_duration > 0:
+                if eng.dialect.name == "postgresql":
+                    conn = conn.execution_options(postgresql_readonly=True)
                     try:
-                        conn.execute(
-                            text("SELECT set_config('statement_timeout', :t_val, true)"),
-                            {"t_val": str(int(timeout_duration))},
-                        )
-                    except Exception as t_err:
-                        logger.debug("Could not set connection statement_timeout: %s", t_err)
+                        conn.execute(text("SELECT set_config('transaction_read_only', 'on', true)"))
+                    except Exception as ro_err:
+                        logger.debug("Could not set connection transaction_read_only: %s", ro_err)
+                    if timeout_duration > 0:
+                        try:
+                            conn.execute(
+                                text("SELECT set_config('statement_timeout', :t_val, true)"),
+                                {"t_val": str(int(timeout_duration))},
+                            )
+                        except Exception as t_err:
+                            logger.debug("Could not set connection statement_timeout: %s", t_err)
 
                 result = conn.execute(text(sql), query_params)
                 columns = list(result.keys()) if result.returns_rows else []

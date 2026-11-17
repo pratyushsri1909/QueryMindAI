@@ -179,3 +179,47 @@ curl http://127.0.0.1:8000/health?include_db=true
 curl http://127.0.0.1:8000/api/v1/health
 ```
 
+---
+
+## 9. Production Least-Privilege Application Role Setup
+
+For production deployment, the application **must not** connect as the PostgreSQL superuser (`postgres`). A dedicated application role (`querymind_app`) must be provisioned with strictly read-only access to QueryMind tables.
+
+### Step 9.1: Run the Role Setup Script
+
+As database administrator, execute `backend/scripts/setup_restricted_role.sql`:
+
+```bash
+psql -U postgres -d querymind_db -f backend/scripts/setup_restricted_role.sql
+```
+
+This script:
+1. Creates the `querymind_app` role with `NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT`.
+2. Grants `USAGE` on schema `public`.
+3. Grants `SELECT` strictly on `students`, `courses`, and `enrollments`.
+4. Revokes all `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, and DDL privileges.
+5. Revokes all sequence privileges.
+6. Sets `default_transaction_read_only = on` for the role.
+
+### Step 9.2: Configure Application Connection
+
+Update `backend/.env` to use the restricted role credentials:
+
+```env
+DATABASE_URL=postgresql+psycopg://querymind_app:YOUR_SECURE_PASSWORD@localhost:5432/querymind_db
+```
+
+### Step 9.3: Verify Role Enforcement
+
+```sql
+-- Connect as restricted role:
+psql -U querymind_app -d querymind_db
+
+-- Permitted query:
+SELECT COUNT(*) FROM students;
+
+-- Denied modification (aborted by PostgreSQL permission layer):
+INSERT INTO students (name) VALUES ('unauthorized');
+-- Output: ERROR: permission denied for table students
+```
+

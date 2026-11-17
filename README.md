@@ -396,17 +396,23 @@ Use `main` for the integrated release. The `feature/application` branch is behin
    pip install -r requirements.txt
    ```
 
-4. Configure environment variables (Optional):
+4. Configure environment variables:
    ```bash
    cp .env.example .env
-   # Default: QUERYMIND_MODE=mock
-   # Set QUERYMIND_MODE=database to use the real NLP + SQL engine + PostgreSQL pipeline
-   # Set CORS_ORIGINS to comma-separated deployed frontend origins
    ```
+   **Key Configuration Settings:**
+   - `QUERYMIND_MODE`: `mock` (default for offline demo) or `database` (real NLP $\rightarrow$ SQL $\rightarrow$ PostgreSQL pipeline).
+   - `DATABASE_URL`: Connection string (`postgresql+psycopg://<user>:<password>@localhost:5432/querymind_db`).
+   - `CORS_ORIGINS`: Comma-separated allowed frontend origins (e.g. `http://localhost:5173`).
+   - `TEST_DATABASE_URL`: Optional test database URL for live integration tests.
 
-5. Run all automated Pytest tests:
+5. Run automated tests:
    ```bash
-   pytest -v
+   # Run all backend unit, security, and integration tests:
+   pytest -v backend/tests test_nlp_engine.py
+
+   # Run live PostgreSQL integration tests (requires reachable PostgreSQL server):
+   pytest -v backend/tests/test_postgres_integration.py
    ```
 
 6. Start the FastAPI development server:
@@ -416,7 +422,7 @@ Use `main` for the integrated release. The `feature/application` branch is behin
 
 ---
 
-### Step 3: PostgreSQL Database Setup (Optional for Database Mode)
+### Step 3: PostgreSQL Database Setup & Least-Privilege Role
 
 To set up the local PostgreSQL database:
 
@@ -432,6 +438,18 @@ python -m app.database.init_db
 python -m app.database.seed
 ```
 
+#### Production Least-Privilege Application Role
+**Important Security Requirement:** In production environments, QueryMind AI must **never** run under a PostgreSQL superuser account. Instead, configure a dedicated application role (`querymind_app`) granted strictly `SELECT` permissions on `students`, `courses`, and `enrollments`, with all mutation privileges revoked and `default_transaction_read_only = on`.
+
+To create the restricted application role, execute the provided setup script as database administrator:
+```bash
+psql -U postgres -d querymind_db -f scripts/setup_restricted_role.sql
+```
+Then update `DATABASE_URL` in your production environment settings:
+```env
+DATABASE_URL=postgresql+psycopg://querymind_app:YOUR_SECURE_PASSWORD@localhost:5432/querymind_db
+```
+
 See [`docs/DATABASE_SETUP.md`](docs/DATABASE_SETUP.md) for detailed configuration options.
 
 ---
@@ -444,6 +462,9 @@ See [`docs/DATABASE_SETUP.md`](docs/DATABASE_SETUP.md) for detailed configuratio
    npm ci
    npm run dev
    ```
+
+The web dashboard is accessible at:
+- **Local URL:** [http://localhost:5173/](http://localhost:5173/)
 
 ---
 
