@@ -5,11 +5,24 @@
  * Uses native Fetch API with robust error handling and response normalization.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const RAW_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+export const API_BASE_URL = RAW_API_BASE_URL.replace(/\/+$/, '');
+
+async function _extractErrorMessage(response, fallbackMessage) {
+  try {
+    const data = await response.json();
+    if (typeof data?.detail === 'string') return data.detail;
+    if (data?.detail?.message) return data.detail.message;
+    if (data?.message) return data.message;
+  } catch {
+    // Ignore non-JSON error bodies
+  }
+  return `${fallbackMessage} (HTTP ${response.status})`;
+}
 
 /**
  * Check backend service availability and database connectivity via GET /health?include_db=true
- * @returns {Promise<{ healthy: boolean, status?: string, database?: string, error?: string }>}
+ * @returns {Promise<{ healthy: boolean, status?: string, database?: string, mode?: string, databaseName?: string|null, error?: string }>}
  */
 export async function checkBackendHealth() {
   try {
@@ -21,7 +34,14 @@ export async function checkBackendHealth() {
     });
 
     if (!response.ok) {
-      return { healthy: false, error: `HTTP ${response.status} from health check` };
+      return {
+        healthy: false,
+        status: 'offline',
+        database: 'disconnected',
+        mode: 'unknown',
+        databaseName: null,
+        error: `HTTP ${response.status} from health check`,
+      };
     }
 
     const data = await response.json();
@@ -29,11 +49,16 @@ export async function checkBackendHealth() {
       healthy: data.status === 'healthy',
       status: data.status,
       database: data.database || 'disconnected',
+      mode: data.mode || 'mock',
+      databaseName: data.database_name || null,
     };
   } catch (err) {
     return {
       healthy: false,
+      status: 'offline',
       database: 'disconnected',
+      mode: 'unknown',
+      databaseName: null,
       error: err instanceof Error ? err.message : 'Backend unreachable',
     };
   }
@@ -49,7 +74,7 @@ export async function getDatabaseHealth() {
     headers: { 'Accept': 'application/json' },
   });
   if (!response.ok) {
-    throw new Error(`Database health check failed (HTTP ${response.status})`);
+    throw new Error(await _extractErrorMessage(response, 'Database health check failed'));
   }
   return response.json();
 }
@@ -64,7 +89,7 @@ export async function getDatabaseStudents() {
     headers: { 'Accept': 'application/json' },
   });
   if (!response.ok) {
-    throw new Error(`Failed to fetch student records from database (HTTP ${response.status})`);
+    throw new Error(await _extractErrorMessage(response, 'Failed to fetch student records from database'));
   }
   return response.json();
 }

@@ -24,6 +24,8 @@
 --    from your secrets manager or environment configuration.
 -- 3. Execute this script against target database 'querymind_db':
 --      psql -U postgres -d querymind_db -f setup_restricted_role.sql
+--      (For Supabase, run in the SQL Editor, then connect via Supavisor pooler
+--       using username format: querymind_app.<project-ref>)
 -- 4. Configure the application environment with this role:
 --      DATABASE_URL=postgresql+psycopg://querymind_app:YOUR_PASSWORD@localhost:5432/querymind_db
 -- =============================================================================
@@ -64,8 +66,23 @@ REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE students F
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE courses FROM querymind_app;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE enrollments FROM querymind_app;
 
--- 5. Revoke access to PostgreSQL sequence mutation functions
-REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM querymind_app;
+-- 5. Revoke access to QueryMind table sequences without touching unrelated extension sequences
+DO $$
+DECLARE
+    seq_name TEXT;
+BEGIN
+    FOREACH seq_name IN ARRAY ARRAY[
+        'students_student_id_seq',
+        'courses_course_id_seq',
+        'enrollments_enrollment_id_seq'
+    ]
+    LOOP
+        IF to_regclass('public.' || seq_name) IS NOT NULL THEN
+            EXECUTE format('REVOKE ALL ON SEQUENCE public.%I FROM querymind_app;', seq_name);
+        END IF;
+    END LOOP;
+END
+$$;
 
 -- 6. Enforce read-only transactions at the database session level
 ALTER ROLE querymind_app SET default_transaction_read_only = on;

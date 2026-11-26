@@ -709,6 +709,7 @@ def test_api_database_students_with_override(in_memory_db):
         app.dependency_overrides.pop(get_db, None)
 
 
+
 def test_api_database_students_empty_table(in_memory_db):
     """Verify GET /api/v1/database/students returns empty array and count 0 if no records exist."""
     from app.database.session import get_db
@@ -727,6 +728,7 @@ def test_api_database_students_empty_table(in_memory_db):
         assert payload["data"] == []
     finally:
         app.dependency_overrides.pop(get_db, None)
+
 
 
 def test_api_database_courses_with_override(in_memory_db):
@@ -751,6 +753,7 @@ def test_api_database_courses_with_override(in_memory_db):
         assert payload["data"][0]["credits"] == 4
     finally:
         app.dependency_overrides.pop(get_db, None)
+
 
 
 def test_api_database_enrollments_with_override(in_memory_db):
@@ -778,6 +781,7 @@ def test_api_database_enrollments_with_override(in_memory_db):
         app.dependency_overrides.pop(get_db, None)
 
 
+
 def test_api_database_students_error_handling():
     """Verify GET /api/v1/database/students returns 500 when database throws an exception."""
     from app.database.session import get_db
@@ -798,3 +802,121 @@ def test_api_database_students_error_handling():
         assert res.json()["detail"] == "Failed to retrieve student records from database."
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+# ---------------------------------------------------------------------------
+# 9. Production / Supabase / CORS Configuration Regression Tests
+# ---------------------------------------------------------------------------
+def test_normalize_database_url_rewrites_supabase_schemes():
+    """Verify postgres:// and postgresql:// URLs normalize to postgresql+psycopg://."""
+    from app.core.config import normalize_database_url
+
+    assert (
+        normalize_database_url("postgres://user:pass@host:5432/postgres")
+        == "postgresql+psycopg://user:pass@host:5432/postgres"
+    )
+    assert (
+        normalize_database_url("postgresql://user:pass@aws-0-us.pooler.supabase.com:6543/postgres")
+        == "postgresql+psycopg://user:pass@aws-0-us.pooler.supabase.com:6543/postgres"
+    )
+    assert (
+        normalize_database_url("postgresql+psycopg://user:pass@localhost:5432/querymind_db")
+        == "postgresql+psycopg://user:pass@localhost:5432/querymind_db"
+    )
+
+
+def test_postgres_connect_args_for_supabase_and_localhost():
+    """Verify remote Supabase URLs enable SSL and disable psycopg prepared statements."""
+    from app.database.session import _build_postgres_connect_args
+
+    remote_args = _build_postgres_connect_args(
+        "postgresql+psycopg://postgres.ref:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+    )
+    assert remote_args["prepare_threshold"] is None
+    assert remote_args["sslmode"] == "require"
+    assert remote_args["connect_timeout"] >= 5
+
+    local_args = _build_postgres_connect_args(
+        "postgresql+psycopg://postgres:secret@localhost:5432/querymind_db"
+    )
+    assert local_args["prepare_threshold"] is None
+    assert "sslmode" not in local_args
+
+
+def test_get_engine_caches_instance_when_password_present():
+    """Verify get_engine reuses cached Engine even though str(engine.url) masks passwords."""
+    import app.database.session as session_mod
+
+    orig_engine = session_mod._engine
+    orig_url = session_mod._engine_url
+    try:
+        session_mod._engine = None
+        session_mod._engine_url = None
+        url = "postgresql+psycopg://postgres:mysecret@localhost:5432/querymind_db"
+        e1 = get_engine(url)
+        e2 = get_engine(url)
+        assert e1 is e2
+    finally:
+        if session_mod._engine is not None and session_mod._engine is not orig_engine:
+            session_mod._engine.dispose()
+        session_mod._engine = orig_engine
+        session_mod._engine_url = orig_url
+
+
+def test_cors_origins_includes_vercel_and_strips_trailing_slash(monkeypatch):
+    """Verify CORS_ORIGINS parsing strips trailing slashes and includes Vercel in defaults."""
+    from app.core.config import DEFAULT_CORS_ORIGINS, load_cors_origins
+
+    assert "https://querymind-ai.vercel.app" in DEFAULT_CORS_ORIGINS
+
+    monkeypatch.setenv("CORS_ORIGINS", "https://querymind-ai.vercel.app/, http://localhost:5173 ")
+    assert load_cors_origins() == [
+        "https://querymind-ai.vercel.app",
+        "http://localhost:5173",
+    ]
+
+
+def test_vercel_origin_cors_preflight_allowed():
+    """Verify FastAPI CORSMiddleware allows https://querymind-ai.vercel.app when using defaults."""
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
+    from app.core.config import DEFAULT_CORS_ORIGINS
+
+    test_app = FastAPI()
+    test_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=DEFAULT_CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @test_app.post("/api/v1/query")
+    def _dummy():
+        return {"ok": True}
+
+    local_client = TestClient(test_app)
+    res = local_client.options(
+        "/api/v1/query",
+        headers={
+            "Origin": "https://querymind-ai.vercel.app",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert res.status_code == 200
+    assert res.headers.get("access-control-allow-origin") == "https://querymind-ai.vercel.app"
+
+
+def test_health_endpoints_report_mode_without_breaking_root_health():
+    """Verify /health remains minimal while /health?include_db=true and /api/v1/health include mode."""
+    res_plain = client.get("/health")
+    assert res_plain.status_code == 200
+    assert res_plain.json() == {"status": "healthy"}
+
+    res_inc = client.get("/health?include_db=true")
+    assert res_inc.status_code == 200
+    assert res_inc.json()["mode"] in ("mock", "database")
+
+    res_api = client.get("/api/v1/health")
+    assert res_api.status_code == 200
+    assert res_api.json()["mode"] in ("mock", "database")

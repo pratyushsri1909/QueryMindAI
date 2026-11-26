@@ -47,6 +47,8 @@ def api_health() -> Dict[str, Any]:
         "status": "healthy",
         "database": db_check["status"],
         "dialect": db_check.get("dialect", "postgresql"),
+        "mode": settings.querymind_mode,
+        "database_name": db_check.get("database"),
     }
 
 
@@ -67,7 +69,7 @@ def database_health() -> DatabaseHealthResponse:
         with eng.connect() as conn:
             conn.execute(text("SELECT 1"))
 
-        db_name = eng.url.database or "querymind_db"
+        db_name = eng.url.database or "postgres"
         db_type = eng.dialect.name
 
         return DatabaseHealthResponse(

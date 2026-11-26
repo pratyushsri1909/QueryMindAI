@@ -4,11 +4,17 @@ import QueryInput from './components/QueryInput';
 import SqlPanel from './components/SqlPanel';
 import ResultsTable from './components/ResultsTable';
 import ExecutionInfo from './components/ExecutionInfo';
-import { checkBackendHealth, executeQuery, getDatabaseStudents } from './services/queryService';
+import { API_BASE_URL, checkBackendHealth, executeQuery, getDatabaseStudents } from './services/queryService';
 import { AlertTriangle, Database, ArrowRight, ShieldCheck, Cpu, Server, CheckCircle2, X } from 'lucide-react';
 
 export default function App() {
-  const [backendStatus, setBackendStatus] = useState({ healthy: false, status: 'checking', database: 'disconnected' });
+  const [backendStatus, setBackendStatus] = useState({
+    healthy: false,
+    status: 'checking',
+    database: 'disconnected',
+    mode: 'mock',
+    databaseName: null,
+  });
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -32,7 +38,7 @@ export default function App() {
     checkStatus();
   }, [checkStatus]);
 
-  // Handle query execution (Day 2 prototype flow)
+  // Handle query execution
   const handleExecuteQuery = async (queryText) => {
     setIsLoading(true);
     setErrorMessage('');
@@ -68,6 +74,9 @@ export default function App() {
     }
   };
 
+  const isDatabaseMode = backendStatus.mode === 'database';
+  const dbDisplayName = backendStatus.databaseName || 'PostgreSQL';
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Sticky Top Header */}
@@ -81,31 +90,38 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {/* Backend Offline Warning Banner */}
         {!backendStatus.healthy && backendStatus.status !== 'checking' && (
-          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start space-x-3 text-rose-900 shadow-xs">
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start space-x-3 text-rose-900 shadow-sm">
             <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
             <div className="text-sm">
               <span className="font-bold">Backend Service Unavailable:</span> Cannot reach the FastAPI server at{' '}
               <code className="px-1.5 py-0.5 rounded bg-rose-100 font-mono text-xs">
-                {import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}
+                {API_BASE_URL}
               </code>
-              . Please start the backend service using{' '}
-              <code className="px-1.5 py-0.5 rounded bg-rose-100 font-mono text-xs">
-                uvicorn app.main:app --reload
-              </code>{' '}
-              in the <code className="font-mono text-xs">backend/</code> directory.
+              .{' '}
+              {import.meta.env.DEV ? (
+                <>
+                  Please start the backend service using{' '}
+                  <code className="px-1.5 py-0.5 rounded bg-rose-100 font-mono text-xs">
+                    uvicorn app.main:app --reload
+                  </code>{' '}
+                  in the <code className="font-mono text-xs">backend/</code> directory.
+                </>
+              ) : (
+                'If the backend is hosted on Render free tier, it may be waking from sleep—click the refresh icon in the header in a few seconds.'
+              )}
             </div>
           </div>
         )}
 
         {/* PostgreSQL Direct Verification Action Bar */}
-        <div className="flex items-center justify-between bg-white px-5 py-3 rounded-xl border border-slate-200 shadow-xs">
+        <div className="flex items-center justify-between bg-white px-5 py-3 rounded-xl border border-slate-200 shadow-sm">
           <div className="flex items-center space-x-2 text-xs text-slate-600">
             <Server className={`w-4 h-4 ${backendStatus.database === 'connected' ? 'text-emerald-600' : 'text-slate-400'}`} />
-            <span className="font-medium">PostgreSQL 18 Foundation:</span>
+            <span className="font-medium">PostgreSQL Database:</span>
             <span className={`px-2 py-0.5 rounded-full font-semibold text-[11px] ${
               backendStatus.database === 'connected' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
             }`}>
-              {backendStatus.database === 'connected' ? 'querymind_db (Connected)' : 'Disconnected'}
+              {backendStatus.database === 'connected' ? `${dbDisplayName} (Connected)` : 'Disconnected'}
             </span>
           </div>
 
@@ -122,7 +138,7 @@ export default function App() {
 
         {/* Live PostgreSQL Data Inspector Panel */}
         {showLiveDb && (
-          <div className="bg-white rounded-2xl border border-emerald-200 p-6 shadow-sm space-y-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-emerald-200 p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
@@ -179,7 +195,7 @@ export default function App() {
                   </tbody>
                 </table>
                 <p className="text-[11px] text-slate-400 mt-2">
-                  Retrieved {liveDbStudents.count} verified records directly from PostgreSQL <code className="text-slate-600">querymind_db.students</code> via SQLAlchemy ORM.
+                  Retrieved {liveDbStudents.count} verified records directly from PostgreSQL <code className="text-slate-600">{dbDisplayName}.students</code> via SQLAlchemy ORM.
                 </p>
               </div>
             )}
@@ -196,7 +212,7 @@ export default function App() {
 
         {/* Global Error Banner */}
         {errorMessage && (
-          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start space-x-3 text-rose-900 shadow-sm animate-fadeIn">
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start space-x-3 text-rose-900 shadow-sm">
             <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
             <div className="text-sm flex-1">
               <span className="font-bold">Query Error: </span>
@@ -215,7 +231,9 @@ export default function App() {
               Processing Natural Language Query...
             </p>
             <p className="text-xs text-slate-500 mt-1">
-              Validating syntax &bull; Extracting intent &bull; Generating ANSI SQL &bull; Simulating execution
+              {isDatabaseMode
+                ? 'Extracting intent & entities \u2022 Generating parameterized SQL \u2022 Validating AST \u2022 Querying PostgreSQL'
+                : 'Validating syntax \u2022 Extracting intent \u2022 Generating ANSI SQL \u2022 Simulating execution'}
             </p>
           </div>
         )}
@@ -246,7 +264,7 @@ export default function App() {
               </h2>
               <p className="text-xs text-slate-500 leading-relaxed">
                 Type a natural language query in the prompt above or click one of the suggested example buttons (such as{' '}
-                <span className="font-semibold text-slate-700">"Show students with CGPA above 8.5"</span>) to test the end-to-end integration pipeline.
+                <span className="font-semibold text-slate-700">"Show students with CGPA above 8.5"</span>) to run the end-to-end query pipeline.
               </p>
 
               {/* Architectural Pipeline Badge Checklist */}
@@ -258,12 +276,12 @@ export default function App() {
                 <ArrowRight className="w-3 h-3 text-slate-400" />
                 <span className="flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-100 font-medium">
                   <Cpu className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Mock NLP &rarr; IR</span>
+                  <span>{isDatabaseMode ? 'Rule-Based NLP \u2192 IR' : 'Mock NLP \u2192 IR'}</span>
                 </span>
                 <ArrowRight className="w-3 h-3 text-slate-400" />
                 <span className="flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-100 font-medium">
                   <Database className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Mock SQL Engine</span>
+                  <span>{isDatabaseMode ? 'SQLGlot + PostgreSQL' : 'Mock SQL Engine'}</span>
                 </span>
               </div>
             </div>
@@ -274,8 +292,8 @@ export default function App() {
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>QueryMind AI &bull; Academic NLP-to-SQL Architecture &bull; Day 3 Database Foundation</span>
-          <span className="text-slate-400">Member 3: Backend, Frontend &amp; Integration</span>
+          <span>QueryMind AI &bull; Academic NLP-to-SQL Architecture &bull; PostgreSQL Read-Only Pipeline</span>
+          <span className="text-slate-400">FastAPI + React + Supabase PostgreSQL</span>
         </div>
       </footer>
     </div>

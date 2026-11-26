@@ -136,6 +136,24 @@ class TestSQLEngineNLPIntegration(unittest.TestCase):
         self.assertFalse(res["success"])
         self.assertEqual(res["error"]["code"], "UNSUPPORTED_QUERY")
 
+    def test_13_nlp_show_top_students_ordered_by_cgpa(self):
+        """NLP Query: 'Show top students ordered by CGPA' -> ORDER BY students.cgpa DESC."""
+        query = "Show top students ordered by CGPA"
+        ir = process_natural_language(query)
+        res = process_ir(ir)
+
+        self.assertTrue(res["success"], f"Failed for query '{query}': {res}")
+        self.assertIn("ORDER BY students.cgpa DESC", res["generated_sql"])
+
+    def test_14_nlp_enrollments_avg_does_not_target_varchar_grade(self):
+        """Ensure AVG on enrollments does not generate invalid AVG(enrollments.grade)."""
+        query = "Find average enrollment grade"
+        ir = process_natural_language(query)
+        assert not any(
+            agg.get("function") == "AVG" and agg.get("column") == "grade"
+            for agg in ir.get("aggregations", [])
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

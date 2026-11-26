@@ -1,6 +1,6 @@
 """Main entry point for the QueryMind AI FastAPI backend application."""
 
-from typing import Dict, Optional
+from typing import Dict
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,14 +14,17 @@ app = FastAPI(
     version=settings.app_version,
 )
 
-# Configure CORS for local development (e.g. Vite frontend)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Configure CORS for local development and deployed Vercel origin
+cors_kwargs = {
+    "allow_origins": settings.cors_origins,
+    "allow_credentials": "*" not in settings.cors_origins,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+if settings.cors_origin_regex:
+    cors_kwargs["allow_origin_regex"] = settings.cors_origin_regex
+
+app.add_middleware(CORSMiddleware, **cors_kwargs)
 
 # Mount modular API router under /api/v1
 app.include_router(api_router, prefix=settings.api_v1_prefix)
@@ -51,10 +54,13 @@ def health_check(include_db: bool = False) -> Dict[str, str]:
     """Health check endpoint indicating whether the backend service is operational.
 
     Args:
-        include_db: If True, tests live database connectivity and includes database status.
+        include_db: If True, tests live database connectivity and includes mode/database metadata.
     """
-    payload = {"status": "healthy"}
+    payload: Dict[str, str] = {"status": "healthy"}
     if include_db:
         db_info = check_db_connection()
         payload["database"] = db_info["status"]
+        payload["mode"] = settings.querymind_mode
+        if db_info.get("database"):
+            payload["database_name"] = db_info["database"]
     return payload

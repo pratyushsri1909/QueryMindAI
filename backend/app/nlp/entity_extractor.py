@@ -180,27 +180,29 @@ class EntityExtractor:
                 "alias": "total_count"
             })
 
-        # AVG
+        # AVG (only on numeric metrics; avoid applying AVG to VARCHAR grade)
         if "average" in lemmas or re.search(r"\b(average|avg|mean)\b", query_lower):
-            col = "cgpa" if table == "students" else ("credits" if table == "courses" else "grade")
-            aggregations.append({
-                "function": "AVG",
-                "column": col,
-                "alias": f"average_{col}"
-            })
+            if table in {"students", "courses"}:
+                col = "cgpa" if table == "students" else "credits"
+                aggregations.append({
+                    "function": "AVG",
+                    "column": col,
+                    "alias": f"average_{col}"
+                })
 
-        # SUM
+        # SUM (only on numeric metrics)
         if "sum" in lemmas or (re.search(r"\b(sum|total credits)\b", query_lower) and not re.search(r"\btotal count\b", query_lower)):
-            col = "credits" if table == "courses" else "cgpa"
-            aggregations.append({
-                "function": "SUM",
-                "column": col,
-                "alias": f"total_{col}"
-            })
+            if table in {"students", "courses"}:
+                col = "credits" if table == "courses" else "cgpa"
+                aggregations.append({
+                    "function": "SUM",
+                    "column": col,
+                    "alias": f"total_{col}"
+                })
 
         # MAX
         if "maximum" in lemmas or re.search(r"\b(maximum|max|highest marks)\b", query_lower):
-            col = "cgpa" if table == "students" else "credits"
+            col = "cgpa" if table == "students" else ("credits" if table == "courses" else "grade")
             aggregations.append({
                 "function": "MAX",
                 "column": col,
@@ -209,7 +211,7 @@ class EntityExtractor:
 
         # MIN
         if "minimum" in lemmas or re.search(r"\b(minimum|min|lowest marks)\b", query_lower):
-            col = "cgpa" if table == "students" else "credits"
+            col = "cgpa" if table == "students" else ("credits" if table == "courses" else "grade")
             aggregations.append({
                 "function": "MIN",
                 "column": col,
@@ -237,22 +239,36 @@ class EntityExtractor:
         query_lower = query.lower()
         lemmas = set(prep.get("lemmas", [])) if prep else set()
         order_by = []
-        sort_col = "cgpa" if table == "students" else ("credits" if table == "courses" else "student_id")
+        default_sort_col = "cgpa" if table == "students" else ("credits" if table == "courses" else "student_id")
+        sort_col = default_sort_col
+
+        order_clause_match = re.search(r"\b(?:ordered|order|sorted|sort)\s+by\s+(.+)$", query_lower)
+        if order_clause_match and table in self.column_synonyms:
+            clause_tail = order_clause_match.group(1)
+            for col_name, synonyms in self.column_synonyms[table].items():
+                if any(re.search(rf"\b{re.escape(syn)}\b", clause_tail) for syn in synonyms):
+                    sort_col = col_name
+                    break
 
         if (
+            "ascending" in lemmas
+            or re.search(r"\b(ascending|asc)\b", query_lower)
+            or re.search(r"\bbottom\s+\d+\b|\b(?:bottom|lowest|worst)\b", query_lower)
+        ):
+            order_by.append({
+                "column": sort_col,
+                "direction": "ASC"
+            })
+        elif (
             "descending" in lemmas
             or re.search(r"\b(descending|desc)\b", query_lower)
-            or re.search(r"\btop\s+\d+\b|\bhighest\b|\bbest\b", query_lower)
+            or re.search(r"\btop\s+\d+\b|\b(?:top|highest|best)\b", query_lower)
         ):
             order_by.append({
                 "column": sort_col,
                 "direction": "DESC"
             })
-        elif (
-            "ascending" in lemmas
-            or re.search(r"\b(ascending|asc)\b", query_lower)
-            or re.search(r"\bbottom\s+\d+\b|\blowest\b|\bworst\b", query_lower)
-        ):
+        elif order_clause_match:
             order_by.append({
                 "column": sort_col,
                 "direction": "ASC"

@@ -483,16 +483,41 @@ The web dashboard is accessible at:
 
 ---
 
-## 10. Production Deployment Checklist
+## 10. Production Deployment Guide (Vercel + Render + Supabase)
 
-The repository does not currently include provider-specific deployment manifests. Before public deployment:
+The repository includes deployment manifests for **Render** ([`render.yaml`](render.yaml)) and **Vercel** ([`frontend/vercel.json`](frontend/vercel.json)).
 
-1. Provision PostgreSQL and set `QUERYMIND_MODE=database`.
-2. Set `DATABASE_URL` in the backend host's secret/environment settings. Never commit `.env` or database credentials.
-3. Set `CORS_ORIGINS` to the exact frontend origin(s), comma-separated. Do not use `*` with credentialed CORS.
-4. Run `python -m app.database.init_db` and `python -m app.database.seed` from `backend/` as a controlled database setup step.
-5. Deploy the backend as an ASGI service from `backend/`, using `uvicorn app.main:app --host 0.0.0.0 --port <host-port>`.
-6. Set frontend build variable `VITE_API_BASE_URL` to the deployed backend URL, then run `npm ci` and `npm run build` from `frontend/` and publish the generated `dist/` directory.
-7. Verify health endpoints, filtered queries, aggregate queries, JOIN queries, empty results, and rejected out-of-domain queries against the deployed service.
+### Architecture Mapping
+- **Frontend:** Vercel (`https://querymind-ai.vercel.app`) — Root Directory: `frontend`
+- **Backend:** Render (`https://querymind-ai.onrender.com`) — Root Directory: `backend`
+- **Database:** Supabase PostgreSQL (connected via Supavisor Pooler for IPv4 compatibility)
+
+### Step-by-Step Deployment
+
+1. **Supabase (PostgreSQL):**
+   - Create a Supabase project and copy the **Connection Pooler** URI (Session mode port `5432` or Transaction mode port `6543` on `aws-*-*.pooler.supabase.com`, since Render outbound networking is IPv4-only).
+   - From `backend/` (with `DATABASE_URL` pointing to your Supabase pooler URI), initialize tables and seed sample data once:
+     ```bash
+     python -m app.database.init_db
+     python -m app.database.seed
+     ```
+   - *(Optional hardened role)* Run [`backend/scripts/setup_restricted_role.sql`](backend/scripts/setup_restricted_role.sql) in the Supabase SQL Editor (after replacing the placeholder password) and connect using `querymind_app.<project-ref>`.
+
+2. **Render (FastAPI Backend):**
+   - Connect your GitHub repository to Render using [`render.yaml`](render.yaml) (or create a Web Service with Root Directory `backend`, Build Command `pip install -r requirements.txt`, Start Command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, Health Check Path `/health`).
+   - Set environment variables in Render:
+     - `QUERYMIND_MODE=database`
+     - `DATABASE_URL=<your-supabase-pooler-uri>?sslmode=require` *(never commit secrets to Git)*
+     - `CORS_ORIGINS=https://querymind-ai.vercel.app`
+     - `DB_STATEMENT_TIMEOUT_MS=5000`
+     - `DB_CONNECT_TIMEOUT=10`
+
+3. **Vercel (React + Vite Frontend):**
+   - Import the repository in Vercel with Root Directory set to `frontend` (Build Command `npm run build`, Output Directory `dist`, configured via [`frontend/vercel.json`](frontend/vercel.json)).
+   - Ensure `VITE_API_BASE_URL=https://querymind-ai.onrender.com` is set in Vercel Environment Variables (also set as default in `frontend/.env.production`).
+
+4. **Post-Deployment Verification:**
+   - Check `https://querymind-ai.onrender.com/health?include_db=true` and `https://querymind-ai.onrender.com/api/v1/database/health` to confirm `database: "connected"` and `mode: "database"`.
+   - Open `https://querymind-ai.vercel.app`, verify header badges show `DATABASE PIPELINE`, `DB: Connected`, and `Backend Connected`, inspect live PostgreSQL students, and run filtered, aggregate, JOIN, and out-of-domain queries.
 
 The current NLP implementation is rule-based. Do not describe it as a trained machine-learning model or LLM-powered system unless that capability is added and evaluated.
