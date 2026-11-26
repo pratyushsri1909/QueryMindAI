@@ -396,7 +396,7 @@ Use `main` for the integrated release. The `feature/application` branch is behin
    pip install -r requirements.txt
    ```
 
-4. Configure environment variables:
+4. Configure environment variables in the global root `.env` (copy from `.env.example` at the repository root):
    ```bash
    cp .env.example .env
    ```
@@ -492,8 +492,8 @@ All environment configuration is managed through the global root `.env` file ([`
 - **Frontend (`frontend/vite.config.js`):** `OS / Vercel env` > global root `.env` (`envDir` points to repo root)
 
 ### Architecture Mapping
-- **Frontend:** Vercel (`https://querymind-ai.vercel.app`) — Root Directory: `frontend`
-- **Backend:** Render (`https://querymind-ai.onrender.com`) — Root Directory: `backend`
+- **Frontend:** Vercel (`https://querymindai-iiitk.vercel.app`) — Root Directory: `frontend`
+- **Backend:** Render (`https://querymindai-aj2h.onrender.com`) — Root Directory: `backend`
 - **Database:** Supabase PostgreSQL (connected via Supavisor Pooler for IPv4 compatibility)
 
 ### Step-by-Step Deployment
@@ -513,11 +513,11 @@ All environment configuration is managed through the global root `.env` file ([`
      - **Build Command:** `pip install -r requirements.txt`
      - **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
      - **Health Check Path:** `/health`
-   - Configure these environment variables (matching [`backend/.env.example`](backend/.env.example)) in Render's Environment settings:
+   - Configure these environment variables (matching the root [`.env.example`](.env.example)) in Render's Environment settings:
      - `PYTHON_VERSION=3.11.9`
      - `QUERYMIND_MODE=database`
      - `DATABASE_URL=<your-supabase-pooler-uri>?sslmode=require` *(never commit `.env` secrets to Git)*
-     - `CORS_ORIGINS=https://querymind-ai.vercel.app`
+     - `CORS_ORIGINS=https://querymindai-iiitk.vercel.app`
      - `DB_STATEMENT_TIMEOUT_MS=5000`
      - `DB_CONNECT_TIMEOUT=10`
 
@@ -527,10 +527,10 @@ All environment configuration is managed through the global root `.env` file ([`
      - **Framework Preset:** `Vite`
      - **Build Command:** `npm run build`
      - **Output Directory:** `dist`
-   - Set `VITE_API_BASE_URL=https://querymind-ai.onrender.com` in Vercel's Environment Variables (matching [`frontend/.env.example`](frontend/.env.example)).
+   - Set `VITE_API_BASE_URL=https://querymindai-aj2h.onrender.com` in Vercel's Environment Variables (matching the root [`.env.example`](.env.example)).
 
 4. **Post-Deployment Verification:**
-   - Check `https://querymind-ai.onrender.com/health?include_db=true` and `https://querymind-ai.onrender.com/api/v1/database/health` to confirm `database: "connected"` and `mode: "database"`.
-   - Open `https://querymind-ai.vercel.app`, verify header badges show `DATABASE PIPELINE`, `DB: Connected`, and `Backend Connected`, inspect live PostgreSQL students, and run filtered, aggregate, JOIN, and out-of-domain queries.
+   - Check `https://querymindai-aj2h.onrender.com/health?include_db=true` and `https://querymindai-aj2h.onrender.com/api/v1/database/health` to confirm `database: "connected"` and `mode: "database"`.
+   - Open `https://querymindai-iiitk.vercel.app`, verify header badges show `DATABASE PIPELINE`, `DB: Connected`, and `Backend Connected`, inspect live PostgreSQL students, and run filtered, aggregate, JOIN, and out-of-domain queries.
 
 The current NLP implementation is rule-based. Do not describe it as a trained machine-learning model or LLM-powered system unless that capability is added and evaluated.

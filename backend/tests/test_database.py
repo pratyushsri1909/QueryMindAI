@@ -604,8 +604,11 @@ def test_health_endpoint_with_database_flag():
 # ---------------------------------------------------------------------------
 # 7. Query API Integration: Mock vs Database Mode
 # ---------------------------------------------------------------------------
-def test_query_api_default_mock_mode_preserved():
-    """Verify that POST /api/v1/query defaults to Day 2 mock pipeline preserving contract."""
+def test_query_api_default_mock_mode_preserved(monkeypatch):
+    """Verify that POST /api/v1/query defaults to Day 2 mock pipeline when mode is mock."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "querymind_mode", "mock")
     res = client.post("/api/v1/query", json={"query": "Show students with CGPA above 8.5"})
     assert res.status_code == 200
     data = res.json()
@@ -825,10 +828,12 @@ def test_normalize_database_url_rewrites_supabase_schemes():
     )
 
 
-def test_postgres_connect_args_for_supabase_and_localhost():
+def test_postgres_connect_args_for_supabase_and_localhost(monkeypatch):
     """Verify remote Supabase URLs enable SSL and disable psycopg prepared statements."""
+    from app.core.config import settings
     from app.database.session import _build_postgres_connect_args
 
+    monkeypatch.setattr(settings, "db_sslmode", "")
     remote_args = _build_postgres_connect_args(
         "postgresql+psycopg://postgres.ref:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
     )
@@ -867,17 +872,17 @@ def test_cors_origins_includes_vercel_and_strips_trailing_slash(monkeypatch):
     """Verify CORS_ORIGINS parsing strips trailing slashes and includes Vercel in defaults."""
     from app.core.config import DEFAULT_CORS_ORIGINS, load_cors_origins
 
-    assert "https://querymind-ai.vercel.app" in DEFAULT_CORS_ORIGINS
+    assert "https://querymindai-iiitk.vercel.app" in DEFAULT_CORS_ORIGINS
 
-    monkeypatch.setenv("CORS_ORIGINS", "https://querymind-ai.vercel.app/, http://localhost:5173 ")
+    monkeypatch.setenv("CORS_ORIGINS", "https://querymindai-iiitk.vercel.app/, http://localhost:5173 ")
     assert load_cors_origins() == [
-        "https://querymind-ai.vercel.app",
+        "https://querymindai-iiitk.vercel.app",
         "http://localhost:5173",
     ]
 
 
 def test_vercel_origin_cors_preflight_allowed():
-    """Verify FastAPI CORSMiddleware allows https://querymind-ai.vercel.app when using defaults."""
+    """Verify FastAPI CORSMiddleware allows https://querymindai-iiitk.vercel.app when using defaults."""
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
     from app.core.config import DEFAULT_CORS_ORIGINS
@@ -899,12 +904,12 @@ def test_vercel_origin_cors_preflight_allowed():
     res = local_client.options(
         "/api/v1/query",
         headers={
-            "Origin": "https://querymind-ai.vercel.app",
+            "Origin": "https://querymindai-iiitk.vercel.app",
             "Access-Control-Request-Method": "POST",
         },
     )
     assert res.status_code == 200
-    assert res.headers.get("access-control-allow-origin") == "https://querymind-ai.vercel.app"
+    assert res.headers.get("access-control-allow-origin") == "https://querymindai-iiitk.vercel.app"
 
 
 def test_health_endpoints_report_mode_without_breaking_root_health():

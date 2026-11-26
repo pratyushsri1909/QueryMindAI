@@ -10,6 +10,14 @@ from app.sql_engine.mock_sql_engine import process_ir
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _force_mock_mode(monkeypatch) -> None:
+    """Keep Day 2 mock contract tests independent of local .env QUERYMIND_MODE."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "querymind_mode", "mock")
+
+
 def test_post_query_success_cgpa() -> None:
     """Verify successful query processing for student CGPA query."""
     payload = {"query": "Show students with CGPA above 8.5"}

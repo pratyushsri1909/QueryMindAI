@@ -275,7 +275,20 @@ def handle_query(request: QueryRequest) -> QueryResponse:
             # If database execution failed due to connection failure, normalize message
             if execution_payload.get("status") == "error":
                 err = execution_payload.get("error") or ""
-                if "connection" in err.lower() or "timeout" in err.lower() or "refused" in err.lower() or "permission denied" in err.lower():
+                err_lower = err.lower()
+                if any(
+                    term in err_lower
+                    for term in (
+                        "connection",
+                        "timeout",
+                        "refused",
+                        "permission denied",
+                        "resolve host",
+                        "getaddrinfo",
+                        "could not translate",
+                        "unreachable",
+                    )
+                ):
                     execution_payload["error"] = f"Database is disconnected ({err})"
 
         return QueryResponse(
