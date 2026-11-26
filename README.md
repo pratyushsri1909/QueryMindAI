@@ -485,7 +485,11 @@ The web dashboard is accessible at:
 
 ## 10. Production Deployment Guide (Vercel + Render + Supabase)
 
-The repository includes deployment manifests for **Render** ([`render.yaml`](render.yaml)) and **Vercel** ([`frontend/vercel.json`](frontend/vercel.json)).
+All environment configuration is managed through the global root `.env` file ([`.env.example`](.env.example) template) and host Environment Variables.
+
+### Environment Loading
+- **Backend (`backend/app/core/config.py`):** `OS / Render env` > global root `.env`
+- **Frontend (`frontend/vite.config.js`):** `OS / Vercel env` > global root `.env` (`envDir` points to repo root)
 
 ### Architecture Mapping
 - **Frontend:** Vercel (`https://querymind-ai.vercel.app`) — Root Directory: `frontend`
@@ -496,7 +500,7 @@ The repository includes deployment manifests for **Render** ([`render.yaml`](ren
 
 1. **Supabase (PostgreSQL):**
    - Create a Supabase project and copy the **Connection Pooler** URI (Session mode port `5432` or Transaction mode port `6543` on `aws-*-*.pooler.supabase.com`, since Render outbound networking is IPv4-only).
-   - From `backend/` (with `DATABASE_URL` pointing to your Supabase pooler URI), initialize tables and seed sample data once:
+   - From `backend/` (with `DATABASE_URL` in `.env` pointing to your Supabase pooler URI), initialize tables and seed sample data once:
      ```bash
      python -m app.database.init_db
      python -m app.database.seed
@@ -504,17 +508,26 @@ The repository includes deployment manifests for **Render** ([`render.yaml`](ren
    - *(Optional hardened role)* Run [`backend/scripts/setup_restricted_role.sql`](backend/scripts/setup_restricted_role.sql) in the Supabase SQL Editor (after replacing the placeholder password) and connect using `querymind_app.<project-ref>`.
 
 2. **Render (FastAPI Backend):**
-   - Connect your GitHub repository to Render using [`render.yaml`](render.yaml) (or create a Web Service with Root Directory `backend`, Build Command `pip install -r requirements.txt`, Start Command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, Health Check Path `/health`).
-   - Set environment variables in Render:
+   - Create a Web Service connected to this GitHub repository with:
+     - **Root Directory:** `backend`
+     - **Build Command:** `pip install -r requirements.txt`
+     - **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+     - **Health Check Path:** `/health`
+   - Configure these environment variables (matching [`backend/.env.example`](backend/.env.example)) in Render's Environment settings:
+     - `PYTHON_VERSION=3.11.9`
      - `QUERYMIND_MODE=database`
-     - `DATABASE_URL=<your-supabase-pooler-uri>?sslmode=require` *(never commit secrets to Git)*
+     - `DATABASE_URL=<your-supabase-pooler-uri>?sslmode=require` *(never commit `.env` secrets to Git)*
      - `CORS_ORIGINS=https://querymind-ai.vercel.app`
      - `DB_STATEMENT_TIMEOUT_MS=5000`
      - `DB_CONNECT_TIMEOUT=10`
 
 3. **Vercel (React + Vite Frontend):**
-   - Import the repository in Vercel with Root Directory set to `frontend` (Build Command `npm run build`, Output Directory `dist`, configured via [`frontend/vercel.json`](frontend/vercel.json)).
-   - Ensure `VITE_API_BASE_URL=https://querymind-ai.onrender.com` is set in Vercel Environment Variables (also set as default in `frontend/.env.production`).
+   - Import the repository in Vercel with:
+     - **Root Directory:** `frontend`
+     - **Framework Preset:** `Vite`
+     - **Build Command:** `npm run build`
+     - **Output Directory:** `dist`
+   - Set `VITE_API_BASE_URL=https://querymind-ai.onrender.com` in Vercel's Environment Variables (matching [`frontend/.env.example`](frontend/.env.example)).
 
 4. **Post-Deployment Verification:**
    - Check `https://querymind-ai.onrender.com/health?include_db=true` and `https://querymind-ai.onrender.com/api/v1/database/health` to confirm `database: "connected"` and `mode: "database"`.

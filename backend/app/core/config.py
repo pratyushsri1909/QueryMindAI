@@ -6,15 +6,40 @@ from typing import List, Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
 
-# Load environment variables from .env in backend/ or root directory if present
-env_backend = Path(__file__).resolve().parent.parent.parent / ".env"
-env_root = Path(__file__).resolve().parent.parent.parent.parent / ".env"
-if env_backend.exists():
-    load_dotenv(dotenv_path=env_backend)
-elif env_root.exists():
-    load_dotenv(dotenv_path=env_root)
-else:
-    load_dotenv()
+# Load environment variables with precedence: OS env > backend/.env > root .env
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+ROOT_DIR = BACKEND_DIR.parent
+
+
+def load_environment_files(
+    backend_dir: Optional[Path] = None,
+    root_dir: Optional[Path] = None,
+) -> List[Path]:
+    """Load folder-specific backend/.env and global root .env without overriding OS env."""
+    b_dir = backend_dir or BACKEND_DIR
+    r_dir = root_dir or b_dir.parent
+    loaded_files: List[Path] = []
+
+    env_backend = b_dir / ".env"
+    env_root = r_dir / ".env"
+
+    # Load folder-specific .env first (override=False preserves platform/OS env vars)
+    if env_backend.exists():
+        load_dotenv(dotenv_path=env_backend, override=False)
+        loaded_files.append(env_backend)
+
+    # Load global root .env second (override=False fills only vars not set in OS or backend/.env)
+    if env_root.exists() and env_root.resolve() != env_backend.resolve():
+        load_dotenv(dotenv_path=env_root, override=False)
+        loaded_files.append(env_root)
+
+    if not loaded_files:
+        load_dotenv(override=False)
+
+    return loaded_files
+
+
+load_environment_files()
 
 
 DEFAULT_CORS_ORIGINS = [

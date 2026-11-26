@@ -920,3 +920,32 @@ def test_health_endpoints_report_mode_without_breaking_root_health():
     res_api = client.get("/api/v1/health")
     assert res_api.status_code == 200
     assert res_api.json()["mode"] in ("mock", "database")
+
+
+def test_load_environment_files_precedence(tmp_path, monkeypatch):
+    """Verify OS env > backend/.env > global root .env precedence."""
+    import os
+    from app.core.config import load_environment_files
+
+    root_dir = tmp_path
+    backend_dir = tmp_path / "backend"
+    backend_dir.mkdir()
+
+    (root_dir / ".env").write_text(
+        "QM_TEST_GLOBAL=from_root\nQM_TEST_OVERRIDE=from_root\nQM_TEST_OS=from_root\n",
+        encoding="utf-8",
+    )
+    (backend_dir / ".env").write_text(
+        "QM_TEST_OVERRIDE=from_backend\nQM_TEST_OS=from_backend\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("QM_TEST_GLOBAL", raising=False)
+    monkeypatch.delenv("QM_TEST_OVERRIDE", raising=False)
+    monkeypatch.setenv("QM_TEST_OS", "from_os")
+
+    loaded = load_environment_files(backend_dir=backend_dir, root_dir=root_dir)
+    assert loaded == [backend_dir / ".env", root_dir / ".env"]
+    assert os.getenv("QM_TEST_GLOBAL") == "from_root"
+    assert os.getenv("QM_TEST_OVERRIDE") == "from_backend"
+    assert os.getenv("QM_TEST_OS") == "from_os"
