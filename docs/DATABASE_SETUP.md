@@ -179,3 +179,73 @@ curl http://127.0.0.1:8000/health?include_db=true
 curl http://127.0.0.1:8000/api/v1/health
 ```
 
+---
+
+## 9. Production Least-Privilege Application Role Setup
+
+For production deployment, the application **must not** connect as the PostgreSQL superuser (`postgres`). A dedicated application role (`querymind_app`) must be provisioned with strictly read-only access to QueryMind tables.
+
+### Step 9.1: Run the Role Setup Script
+
+As database administrator, execute `backend/scripts/setup_restricted_role.sql`:
+
+```bash
+psql -U postgres -d querymind_db -f backend/scripts/setup_restricted_role.sql
+```
+
+This script:
+1. Creates the `querymind_app` role with `NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT`.
+2. Grants `USAGE` on schema `public`.
+3. Grants `SELECT` strictly on `students`, `courses`, and `enrollments`.
+4. Revokes all `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, and DDL privileges.
+5. Revokes all sequence privileges.
+6. Sets `default_transaction_read_only = on` for the role.
+
+### Step 9.2: Configure Application Connection
+
+Update `backend/.env` to use the restricted role credentials:
+
+```env
+DATABASE_URL=postgresql+psycopg://querymind_app:YOUR_SECURE_PASSWORD@localhost:5432/querymind_db
+```
+
+### Step 9.3: Verify Role Enforcement
+
+```sql
+-- Connect as restricted role:
+psql -U querymind_app -d querymind_db
+
+-- Permitted query:
+SELECT COUNT(*) FROM students;
+
+-- Denied modification (aborted by PostgreSQL permission layer):
+INSERT INTO students (name) VALUES ('unauthorized');
+-- Output: ERROR: permission denied for table students
+```
+
+---
+
+## 10. Dedicated Test Database for Integration Tests
+
+Live PostgreSQL integration tests (`backend/tests/test_postgres_integration.py`) execute destructive schema setup operations (`Base.metadata.drop_all()` and `Base.metadata.create_all()`).
+
+To safeguard application and production databases:
+- Integration tests strictly require a dedicated `TEST_DATABASE_URL` environment variable.
+- Tests will **never** fall back to `DATABASE_URL`.
+- The database name in `TEST_DATABASE_URL` **must contain `test`** (e.g., `querymind_test_db`). Tests abort before executing any DROP or CREATE operation if this check fails.
+
+### Setting Up Local Integration Testing
+
+1. Create a dedicated test database:
+   ```powershell
+   & "C:\Program Files\PostgreSQL\18\bin\createdb.exe" -U postgres -h localhost -p 5432 querymind_test_db
+   ```
+2. Configure the environment variable:
+   ```powershell
+   $env:TEST_DATABASE_URL = "postgresql+psycopg://postgres:your_password@localhost:5432/querymind_test_db"
+   ```
+3. Run the integration test suite:
+   ```powershell
+   python -m pytest -v backend/tests/test_postgres_integration.py
+   ```
+
